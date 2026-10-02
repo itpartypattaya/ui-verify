@@ -18,6 +18,27 @@
  * Returns: { ok, counts{}, broken[], distorted[], blurry[], oversized[], noDimensions[], noAlt[], pending[] }
  */
 async (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'images', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('Number.parseFloat', () => typeof Number.parseFloat === 'function');
+  needs('document.createElement', () => typeof document.createElement === 'function');
+  needs('Image', () => typeof Image === 'function');
+  needs('setTimeout', () => typeof setTimeout === 'function');
+  if (missingCapabilities.length) return unsupported();
+  const parseFloat = Number.parseFloat;
+
   // 1.5, not 1: at Windows' common 125 % scaling every 1:1 image is "upscaled" by 1.25 and looks fine
   const { max = 20, blurry: upTol = 1.5, oversized: downTol = 2.5 } = opts;
   const name = (el) => {

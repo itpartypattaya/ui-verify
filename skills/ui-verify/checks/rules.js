@@ -14,6 +14,24 @@
  * Returns: { ok, el, computed{}, candidates{prop: [...]}, inactive[], unreadableSheets[], notes[] }
  */
 (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'rules', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('document.styleSheets', () => !!document.styleSheets);
+  needs('matchMedia', () => typeof matchMedia === 'function');
+  if (missingCapabilities.length) return unsupported();
+
   const { selector, props = [], pseudo = null } = opts;
   const el = selector && document.querySelector(selector);
   if (!el) return { check: 'rules', ok: null, error: `no element matches ${selector}` };
@@ -93,6 +111,7 @@
 
   const found = [];
   const unreadable = [];
+  const traversalErrors = [];
   let order = 0;
   let anon = 0;
   // cascade layers in order of first appearance, as a tree: "a.b" = sublayer b of a
@@ -121,7 +140,7 @@
   const walk = (rules, ctx, sheet, parentSel, lp) => {
     for (const r of rules) {
       order++;
-      if (r instanceof CSSStyleRule) {
+      if (r.type === 1) {
         let full = r.selectorText;
         if (parentSel) {
           full = splitList(r.selectorText).map((s) => (s.includes('&') ? s.replace(/&/g, `:is(${parentSel})`) : `:is(${parentSel}) ${s}`)).join(', ');
@@ -146,15 +165,15 @@
           });
         }
         if (r.cssRules && r.cssRules.length) walk(r.cssRules, ctx, sheet, full, lp);
-      } else if (r instanceof CSSMediaRule) {
+      } else if (r.type === 4) {
         walk(r.cssRules, [...ctx, { type: '@media', text: r.media.mediaText, active: matchMedia(r.media.mediaText).matches }], sheet, parentSel, lp);
-      } else if (r instanceof CSSSupportsRule) {
+      } else if (r.type === 12) {
         let ok = null;
         try { ok = CSS.supports(r.conditionText); } catch { /* unknown */ }
         walk(r.cssRules, [...ctx, { type: '@supports', text: r.conditionText, active: ok }], sheet, parentSel, lp);
-      } else if (window.CSSContainerRule && r instanceof CSSContainerRule) {
+      } else if (/^@container\b/i.test(r.cssText)) {
         walk(r.cssRules, [...ctx, { type: '@container', text: r.conditionText, active: null }], sheet, parentSel, lp);
-      } else if (window.CSSScopeRule && r instanceof CSSScopeRule) {
+      } else if (/^@scope\b/i.test(r.cssText)) {
         // active when the element sits inside a scope root and not below a scope limit
         let active = null;
         if (r.start) {
@@ -165,13 +184,13 @@
           active = !!root && !(limit && limit !== root && root.contains(limit));
         }
         walk(r.cssRules, [...ctx, { type: '@scope', text: `(${r.start || ':scope'})${r.end ? ` to (${r.end})` : ''}`, active, scope: r.start || null }], sheet, parentSel, lp);
-      } else if (window.CSSLayerBlockRule && r instanceof CSSLayerBlockRule) {
+      } else if (/^@layer\b/i.test(r.cssText) && !!r.cssRules) {
         const full = (lp ? `${lp}.` : '') + (r.name || `(anonymous ${++anon})`);
         register(full);
         walk(r.cssRules, [...ctx, { type: '@layer', text: full, active: true }], sheet, parentSel, full);
-      } else if (window.CSSLayerStatementRule && r instanceof CSSLayerStatementRule) {
-        for (const n of r.nameList) register((lp ? `${lp}.` : '') + n);
-      } else if (r instanceof CSSImportRule && r.styleSheet) {
+      } else if (/^@layer\b/i.test(r.cssText) && !r.cssRules) {
+        for (const n of (r.nameList || r.cssText.replace(/^@layer\s+/i, '').replace(/;$/, '').split(',').map(n => n.trim()))) register((lp ? `${lp}.` : '') + n);
+      } else if (r.type === 3 && r.styleSheet) {
         const media = r.media && r.media.mediaText;
         let layer = lp;
         if (r.layerName !== null && r.layerName !== undefined) {
@@ -190,7 +209,7 @@
     const media = sheet.media && sheet.media.mediaText;
     const c = media ? [...ctx, { type: '@media', text: media, active: matchMedia(media).matches }] : ctx;
     if (sheet.disabled) c.push({ type: 'disabled', text: 'stylesheet', active: false });
-    walk(rules, c, sheet, null, lp);
+    try { walk(rules, c, sheet, null, lp); } catch (e) { traversalErrors.push({ sheet: short(sheet.href), error: String(e) }); }
   };
   [...document.styleSheets, ...(document.adoptedStyleSheets || [])].forEach((s) => readSheet(s));
 
@@ -238,20 +257,22 @@
       return y.order - x.order;
     };
     list.sort(stronger);
-    if (list[0] && list[0].active === true) list[0].likelyWinner = true;
+    if (!unreadable.length && !traversalErrors.length && list[0] && list[0].active === true) list[0].likelyWinner = true;
     else if (list[0] && typeof list[0].active === 'string') notesFor.push(`${p}: the strongest candidate sits in an unresolved @container/@scope — no winner named`);
     candidates[p] = list.map(({ order: _o, _spec, _layer, inline: _i, ...c }) => c);
   }
   const inactive = found.filter((f) => f.active === false).map((f) => ({ selector: f.selector, at: f.at.join(' › '), sheet: f.sheet }));
   const notes = [...notesFor];
   if (el.getAnimations && el.getAnimations().length) notes.push('the element has running animations/transitions — they override the declarations listed here while they run');
-  if (unreadable.length) notes.push('some stylesheets are cross-origin without CORS — their rules are invisible here but the browser still applies them');
+  if (unreadable.length) notes.push('some stylesheet rules could not be accessed (cross-origin restrictions or unavailable CSSOM) — computed values still include them');
+  if (traversalErrors.length) notes.push('CSSOM traversal failed — candidates are partial and no winner is named');
   if (props.length && wanted.some((p) => !candidates[p].length)) notes.push('no rule declares some of the requested properties — the value is inherited or the initial value; check the parent');
   notes.push('state selectors (:hover, :focus, :checked) only match while that state is on; @scope proximity and shadow-DOM context are not ranked');
   if (pseudo && cs.content === 'none' && /before|after/.test(pseudo)) notes.push(`${pseudo} has content: none — the pseudo-element is not generated at all`);
   return {
     check: 'rules',
-    ok: true,
+    ok: unreadable.length || traversalErrors.length ? null : true,
+    traversalErrors,
     el: name(el),
     pseudo,
     width: innerWidth,

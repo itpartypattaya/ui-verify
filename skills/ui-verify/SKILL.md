@@ -5,34 +5,30 @@ description: "Verify web layout in a real browser with numbers, not by eyeballin
 
 # ui-verify — measure the page, don't trust the picture
 
-A screenshot is not a measuring instrument. Between the layout and the image
-you see sit a compositor (the frame can be captured before the page finished
-painting) and image compression (low-contrast differences vanish). Hence the
-asymmetry this skill exists for:
+A screenshot can precede painting or lose low-contrast detail in compression.
 
 **A positive result is reliable, a negative one is not.** If the effect is
-visible on the screenshot, it is there. If it is not visible, that is equally
-a real defect or a failure of the channel. Same with `grep`: "found" is a
-fact, "not found" is a question.
+visible on the screenshot, it is there. Absence can mean a defect or a channel
+failure. Same with `grep`: "found" is a fact, "not found" is a question.
 
 **A confident number is also just a channel.** A naive contrast meter that
-stops at the first translucent parent reports 1.26 where the truth is 8.8, and
-the next agent "fixes" working CSS. Every check here returns three states —
+stops at a translucent parent can report 1.26 instead of 8.8. Checks return —
 `ok: true`, `ok: false`, `ok: null` (cannot tell, and why) — and says where
 it is unsure instead of filling the gap with a made-up number. A `true` is
 still bounded by what the check covers: read its `notes`, `unmodelled`,
 `skipped` and `method` before treating it as proof.
 
-The cost of a wrong conclusion is not a crash: you go and fix what works, and
-break it on the way.
-
 ## Workflow
 
+0. **Context: `checks/capabilities.js`.** Run once per evaluation context.
+   Some tools expose a read-only DOM rather than a full `window`. Use the
+   reported `availableModes`; unavailable checks return `ok: null` with
+   `missingCapabilities` and `next`. See `references/adapters.md` for Codex.
 1. **Gate: `checks/settle.js`.** Viewport non-zero, document loaded, fonts in,
-   images in, transitions finished. `ok: false` → fix the blockers first. A
-   collapsed or hidden preview pane can report a 0×0 viewport (hidden alone
-   does not mean zero — check), and every geometric number from a 0×0
-   viewport is fiction that looks like data — set an explicit viewport size.
+   images in, transitions finished. `ok: false` → fix the blockers first;
+   `ok: null` → use a full page context before claiming readiness. A
+   hidden pane can report 0×0 (hidden alone does not mean zero — check).
+   Set an explicit viewport; geometry from 0×0 is unusable.
 2. **Measure** with the check that matches the complaint (table below).
 3. **Screenshot** only for what numbers don't measure: composition, rhythm,
    whitespace, "cheap or premium". Not for colour, not for "did it apply".
@@ -59,6 +55,9 @@ and pass its text to your browser tool's JavaScript evaluation:
 
 Details, viewport and colour-scheme commands per tool: `references/adapters.md`.
 Batch navigate → settle → check → screenshot in one call where the tool allows.
+`widths.js { listOnly: true }` plans the widths only (`ok: null`, `tested: 0`).
+Read `cssCoverage.complete`, `unreadableSheets` and `traversalErrors`; an empty
+breakpoint list from an incomplete CSS read does not establish responsive coverage.
 
 ## Complaint → check
 
@@ -93,8 +92,7 @@ covers most layout bug reports.
 
 ## Second-channel rule
 
-A tool said "no" → recheck by a **different mechanism**, not by rerunning
-the same one.
+A tool said "no" → recheck by a **different mechanism**.
 
 | First channel said "no" | Second channel |
 |---|---|
@@ -122,8 +120,7 @@ errors in the log" are all negative results.
 
 ## What this skill does not do
 
-It does not judge composition or taste — that is the screenshot and your eye.
-It is not a full accessibility audit (use axe-core for that), not pixel-diff
-visual regression, not performance (Lighthouse). Shadow DOM and iframe
+Composition and taste need your eye; accessibility needs axe-core, performance
+needs Lighthouse. This is not pixel-diff regression. Shadow DOM and iframe
 contents (same-origin ones included) are not traversed — run the check inside
 the frame, or on the shadow host's content via the page's own tooling.

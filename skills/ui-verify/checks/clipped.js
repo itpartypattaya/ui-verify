@@ -13,6 +13,26 @@
  * Returns: { ok, issues[], intentional{} }
  */
 (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'clipped', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('Number.parseFloat', () => typeof Number.parseFloat === 'function');
+  needs('document.createTreeWalker', () => typeof document.createTreeWalker === 'function');
+  needs('document.createRange', () => typeof document.createRange === 'function');
+  if (missingCapabilities.length) return unsupported();
+  const parseFloat = Number.parseFloat;
+
   const { max = 15, tolerance = 2, limit = 3000 } = opts;
   const name = (el) => {
     let s = el.tagName.toLowerCase();
@@ -45,11 +65,11 @@
   const issues = new Map();
   const intentional = { ellipsis: 0, lineClamp: 0, visuallyHidden: 0 };
   const counted = new Set();
-  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
+  const walker = document.createTreeWalker(document.body, 4 /* SHOW_TEXT */, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
   let n = 0;
   for (let t; (t = walker.nextNode()) && n < limit; n++) {
     const p = t.parentElement;
-    if (!p || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|OPTION|TEXTAREA|TITLE)$/.test(p.tagName) || p instanceof SVGElement) continue;
+    if (!p || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|OPTION|TEXTAREA|TITLE)$/.test(p.tagName) || p.namespaceURI === 'http://www.w3.org/2000/svg') continue;
     if (p.checkVisibility && !p.checkVisibility({ visibilityProperty: true, checkVisibilityCSS: true })) continue;
     const range = document.createRange();
     range.selectNodeContents(t);

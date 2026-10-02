@@ -20,6 +20,48 @@ names like `div.card#promo` and short text samples.
 Tool names below are the ones these servers exposed when this was written;
 if yours differ, look for "evaluate", "resize" and "emulate" in its tool list.
 
+## Capability preflight
+
+Run `checks/capabilities.js` once in the context you will use. It returns
+`availableModes`, `unavailableModes` and individual `apis`; `ok: null` means
+this is an inventory, not a layout test. Each check also guards its required
+APIs and returns `ok: null`, `missingCapabilities`, `error` and `next` when
+they are unavailable. Do not turn missing measurements into passes.
+
+`widths { listOnly: true }` always reports `ok: null`, `mode: 'listOnly'`
+and `tested: 0`. It plans an external resize loop; it does not run it.
+`cssCoverage.complete` describes stylesheet collection; `unreadableSheets`
+records access errors, `traversalErrors` records failures while walking rules.
+These are different from "no media queries". A sweep with incomplete CSS
+cannot pass (a measured defect can still fail). `rules` also withholds a
+likely winner if some stylesheet rules could not be read.
+
+## Codex In-app Browser
+
+The `tab.playwright.evaluate` exposed by `mcp__cua_repl` is a **read-only DOM
+scope**, not Playwright's full page `window`. Read the browser documentation
+returned by the tool before using it. Pass check source directly:
+
+```js
+// src is the file text, read outside the page evaluation.
+const result = await tab.playwright.evaluate(`(${src}\n)(${JSON.stringify(opts)})`);
+```
+
+In the tested context, `overflow`, `grid`, `rules`, `widths { listOnly: true }`
+and `theme` probe mode work. Capability discovery is authoritative for the
+current context; do not assume a tool with "Playwright" in its name exposes
+Canvas, font APIs, animations or DOM mutation. `settle`, `contrast`, `glyphs`,
+`visible`, `images`, `clipped`, `mobile`, the widths iframe sweep and theme
+cycle need APIs this context does not expose.
+
+Use the browser's documented viewport capability for an external resize loop.
+If `settle` is unavailable, record that readiness is unverified: reading
+`document.readyState === 'complete'` alone does not confirm fonts or animations.
+For theme switching, click the real UI toggle with documented locators,
+probe before/after, and restore the original theme. For full checks, use a
+full Playwright/DevTools page context or the Claude tools below. Do not inject
+scripts or find alternate APIs to bypass the read-only evaluation boundary.
+
 ## Claude Code — preview pane / Claude in Chrome
 
 | Need | How |

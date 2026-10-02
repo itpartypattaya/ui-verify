@@ -18,6 +18,27 @@
  * The width comparison is a heuristic; the exact answer is in the font file (e.g. fontTools).
  */
 async (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'glyphs', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('document.createElement', () => typeof document.createElement === 'function');
+  needs('document.fonts iterator', () => !!document.fonts && typeof document.fonts[Symbol.iterator] === 'function');
+  needs('document.fonts.load', () => typeof document.fonts.load === 'function');
+  needs('Canvas 2D', () => !!document.createElement('canvas').getContext('2d'));
+  needs('setTimeout', () => typeof setTimeout === 'function');
+  if (missingCapabilities.length) return unsupported();
+
   let { family = null, chars = null, weight = null, style = null } = opts;
   const { selector = null } = opts;
   if (selector) {

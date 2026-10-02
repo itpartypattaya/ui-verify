@@ -15,6 +15,22 @@
  * Returns: { ok, scrollWidth, clientWidth, overflowPx, masked, culprits[], offscreenOtherSide[] }
  */
 (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'overflow', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  if (missingCapabilities.length) return unsupported();
+
   const { max = 10, tolerance = 1 } = opts;
   const de = document.documentElement;
   const name = (el) => {

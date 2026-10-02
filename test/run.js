@@ -3,6 +3,7 @@
 // Serve the repo root over HTTP and open /test/ — see test/README.md.
 
 const CHECKS = '../skills/ui-verify/checks/';
+import { compatibilityCases } from './compatibility.js';
 const src = {};
 const load = async (file) => (src[file] ??= await (await fetch(CHECKS + file, { cache: 'no-store' })).text());
 
@@ -170,13 +171,14 @@ const cases = [
 
 const rows = [];
 const tbody = document.querySelector('tbody');
-for (const [title, width, file, opts, assert] of cases) {
+for (const [title, width, file, opts, assert, scope] of [...cases, ...compatibilityCases]) {
   const tr = document.createElement('tr');
   let result;
   let checks;
   try {
     const f = await frameAt(width);
-    const fn = f.contentWindow.eval('(' + (await load(file)) + '\n)');
+    const shadows = scope ? scope(f.contentWindow) : {};
+    const fn = f.contentWindow.Function(...Object.keys(shadows), 'return (' + (await load(file)) + '\n)')(...Object.values(shadows));
     result = await fn(opts);
     checks = assert(result, f.contentDocument);
   } catch (e) {

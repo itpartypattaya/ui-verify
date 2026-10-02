@@ -29,12 +29,33 @@
  * Returns: { ok, breakpoints[], tested, failingRanges[], ranges[{ range, overflowPx, culprits, run }], unmeasured[], undecided[] }
  */
 async (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'widths', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('Number.parseFloat', () => typeof Number.parseFloat === 'function');
+  needs('document.styleSheets', () => !!document.styleSheets);
+  if (missingCapabilities.length) return unsupported();
+  const parseFloat = Number.parseFloat;
+
   const { widths: given = null, extra = [], step = 40, height = 900, listOnly = false, run = null, runOpts = {}, pause = 100 } = opts;
   const COMMON = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440, 1920];
   const bps = new Set();
   const mins = new Set();
   const maxs = new Set();
   const unreadable = [];
+  const traversalErrors = [];
+  let sheetsRead = 0;
   const collect = (text) => {
     if (!text) return;
     const exact = (v, u) => parseFloat(v) * (u === 'px' ? 1 : 16);
@@ -48,8 +69,8 @@ async (opts = {}) => {
   };
   const walk = (rules) => {
     for (const r of rules) {
-      if (r instanceof CSSMediaRule) collect(r.media.mediaText);
-      if (r instanceof CSSImportRule) {
+      if (r.type === 4) collect(r.media.mediaText);
+      if (r.type === 3) {
         collect(r.media && r.media.mediaText);
         if (r.styleSheet) read(r.styleSheet);
       }
@@ -58,9 +79,11 @@ async (opts = {}) => {
   };
   const read = (s) => {
     collect(s.media && s.media.mediaText);
-    try { walk(s.cssRules); } catch { unreadable.push(s.href); }
+    let rules;
+    try { rules = s.cssRules; } catch (e) { unreadable.push({ sheet: s.href || 'inline <style>', error: String(e) }); return; }
+    try { walk(rules); sheetsRead++; } catch (e) { traversalErrors.push({ sheet: s.href || 'inline <style>', error: String(e) }); }
   };
-  [...document.styleSheets].forEach(read);
+  [...document.styleSheets, ...(document.adoptedStyleSheets || [])].forEach(read);
   document.querySelectorAll('source[media], link[media]').forEach((n) => collect(n.media));
   const breakpoints = [...bps].filter((v) => v >= 200 && v <= 3000).sort((a, b) => a - b);
   // max-width: 1039px + min-width: 1040px leaves 1039.01–1039.99 uncovered; at fractional zoom
@@ -71,7 +94,17 @@ async (opts = {}) => {
     .filter((v) => v >= 280 && v <= 2560)
     .sort((a, b) => a - b);
   const gapNote = gaps.length ? 'max-width N / min-width N+1 pairs leave a gap at fractional zoom — use range syntax (width < N+1px / width >= N+1px), which leaves none; max-width: N.98px only narrows it to 0.02px' : undefined;
-  if (listOnly) return { check: 'widths', ok: true, breakpoints, gaps, gapNote, widths, unreadableSheets: unreadable };
+  const cssCoverage = { complete: !unreadable.length && !traversalErrors.length, sheetsRead, unreadable: unreadable.length, traversalErrors: traversalErrors.length };
+  const coverage = { breakpoints, gaps, gapNote, widths, cssCoverage, unreadableSheets: unreadable, traversalErrors };
+  if (listOnly) return {
+    check: 'widths', ok: null, mode: 'listOnly', tested: 0, ...coverage,
+    note: 'planning only — no viewport was resized or measured; empty breakpoints/gaps prove nothing when cssCoverage.complete is false',
+    next: 'Resize with the browser tool, run settle.js then overflow.js at each width, and report those measurements separately',
+  };
+  needs('document.createElement', () => typeof document.createElement === 'function');
+  needs('setTimeout', () => typeof setTimeout === 'function');
+  if (missingCapabilities.length) return { ...unsupported(), ...coverage, mode: 'sweep', tested: 0 };
+
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const f = document.createElement('iframe');
@@ -189,7 +222,10 @@ async (opts = {}) => {
   const fmt = (g) => (g.from === g.to ? `${g.from}` : `${g.exactFrom ? '' : '≤'}${g.from}–${g.exactTo ? '' : '≥'}${g.to}`);
   return {
     check: 'widths',
-    ok: ranges.length ? false : unmeasured.length || undecided.length ? null : true,
+    ok: ranges.length ? false : unmeasured.length || undecided.length || !cssCoverage.complete ? null : true,
+    mode: 'sweep',
+    cssCoverage,
+    traversalErrors,
     breakpoints,
     tested: results.length,
     unmeasured: unmeasured.slice(0, 20),

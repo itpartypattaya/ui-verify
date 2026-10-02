@@ -13,6 +13,25 @@
  * Returns: { ok, width, viewportMeta{}, smallText[], smallInputs[], smallTargets[], under44 }
  */
 (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'mobile', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('Number.parseFloat', () => typeof Number.parseFloat === 'function');
+  needs('document.createTreeWalker', () => typeof document.createTreeWalker === 'function');
+  if (missingCapabilities.length) return unsupported();
+  const parseFloat = Number.parseFloat;
+
   const { minText = 12, minInput = 16, target = 24, comfortable = 44, max = 15 } = opts;
   const name = (el) => {
     let s = el.tagName.toLowerCase();
@@ -41,11 +60,11 @@
 
   // ---- small text
   const sizes = new Map();
-  const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
+  const w = document.createTreeWalker(document.body, 4 /* SHOW_TEXT */, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
   const seen = new Set();
   for (let t; (t = w.nextNode());) {
     const p = t.parentElement;
-    if (!p || seen.has(p) || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|OPTION|TITLE)$/.test(p.tagName) || p instanceof SVGElement) continue;
+    if (!p || seen.has(p) || /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|OPTION|TITLE)$/.test(p.tagName) || p.namespaceURI === 'http://www.w3.org/2000/svg') continue;
     seen.add(p);
     if (!visible(p)) continue;
     const fs = parseFloat(getComputedStyle(p).fontSize);

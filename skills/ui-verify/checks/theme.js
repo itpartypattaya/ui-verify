@@ -19,6 +19,24 @@
  * Returns: { ok, mechanism, current, probe, (cycle) changed, unchanged[], stuck[], stale[] }
  */
 async (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'theme', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('document.styleSheets', () => !!document.styleSheets);
+  needs('matchMedia', () => typeof matchMedia === 'function');
+  if (missingCapabilities.length) return unsupported();
+
   const { selectors = ['body', 'h1', 'p', 'a', 'button'], cycle = false, to = null, timeout = 2000 } = opts;
   const de = document.documentElement;
   const body = document.body;
@@ -77,7 +95,7 @@ async (opts = {}) => {
       out[`${s} color`] = cs.color;
       out[`${s} background`] = cs.backgroundColor;
       out[`${s} border`] = cs.borderTopColor;
-      if (el instanceof SVGElement) { out[`${s} fill`] = cs.fill; out[`${s} stroke`] = cs.stroke; } // icons
+      if (el.namespaceURI === 'http://www.w3.org/2000/svg') { out[`${s} fill`] = cs.fill; out[`${s} stroke`] = cs.stroke; } // icons
     }
     return out;
   };
@@ -106,6 +124,19 @@ async (opts = {}) => {
   if (!cycle && !to) return { check: 'theme', ok: true, mechanism: describe, current: current(), probe: probe() };
   if (!switchable) return { check: 'theme', ok: null, mechanism: describe, current: current(), probe: probe(), error: 'cannot switch from inside the page — emulate prefers-color-scheme with the browser tool, then probe again' };
 
+  needs('requestAnimationFrame', () => typeof requestAnimationFrame === 'function');
+  needs('setTimeout', () => typeof setTimeout === 'function');
+  needs('performance.now', () => typeof performance !== 'undefined' && typeof performance.now === 'function');
+  needs('document.getAnimations', () => typeof document.getAnimations === 'function');
+  needs('theme mutation', () => typeof mech.node.setAttribute === 'function' && typeof mech.node.classList.add === 'function');
+  if (cycle) {
+    needs('document.createTextNode', () => typeof document.createTextNode === 'function');
+    needs('Element.cloneNode', () => typeof de.cloneNode === 'function');
+    needs('Number.parseFloat', () => typeof Number.parseFloat === 'function');
+  }
+  if (missingCapabilities.length) return { ...unsupported(), mechanism: describe, current: current(), probe: probe() };
+  const parseFloat = Number.parseFloat;
+
   if (to && !cycle) {
     apply(to);
     await settle();
@@ -129,7 +160,7 @@ async (opts = {}) => {
       const el = document.querySelector(s);
       if (!el || el === de || el === body) continue;
       const cs0 = getComputedStyle(el);
-      const keys = Object.keys(PROPS).filter((k) => (el instanceof SVGElement || !/fill|stroke/.test(k)) && transitioned(cs0, k));
+      const keys = Object.keys(PROPS).filter((k) => (el.namespaceURI === 'http://www.w3.org/2000/svg' || !/fill|stroke/.test(k)) && transitioned(cs0, k));
       if (!keys.length) continue;
       const c = el.cloneNode(false);
       if (el.childNodes.length) c.appendChild(document.createTextNode('x'));

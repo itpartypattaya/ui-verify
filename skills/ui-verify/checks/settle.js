@@ -9,6 +9,30 @@
  * Returns: { ok, blockers[], notes[], viewport, fonts, images, animations, failedResources, context }
  */
 async (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'settle', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('setTimeout', () => typeof setTimeout === 'function');
+  needs('requestAnimationFrame', () => typeof requestAnimationFrame === 'function');
+  needs('performance.now', () => typeof performance !== 'undefined' && typeof performance.now === 'function');
+  needs('document.fonts iterator', () => !!document.fonts && typeof document.fonts[Symbol.iterator] === 'function');
+  needs('document.getAnimations', () => typeof document.getAnimations === 'function');
+  needs('document.fonts.ready', () => !!document.fonts.ready);
+  needs('performance.getEntriesByType', () => typeof performance !== 'undefined' && typeof performance.getEntriesByType === 'function');
+  needs('matchMedia', () => typeof matchMedia === 'function');
+  if (missingCapabilities.length) return unsupported();
+
   const { timeout = 3000 } = opts;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   // rAF never fires in a hidden tab, so every frame wait is raced against a timer

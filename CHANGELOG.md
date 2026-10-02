@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Add `capabilities.js` to identify supported evaluation modes before checks.
+  Each check returns `ok: null` with missing APIs and a next channel when
+  required browser features are unavailable, before mutating the page.
+- Support constructor-free CSSOM and SVG detection and contexts without
+  global `parseFloat`; add the Codex In-app Browser adapter while retaining
+  Claude's preview/Chrome instructions and plugin settings.
+- `widths { listOnly: true }` is explicitly planning-only (`ok: null`,
+  `tested: 0`); report CSS coverage and distinguish access from traversal
+  errors. Partial CSS cannot produce a passing sweep or a likely rule winner.
+- Add 22 capability regressions alongside all 66 existing browser tests.
+
 ## 1.1.0 — 2026-10-03
 
 Fixes from two independent reviews of 1.0 — Codex, then Antigravity

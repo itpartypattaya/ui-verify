@@ -16,6 +16,12 @@ the raw JSON. Cases named `R…` (Codex) and `A…` (Antigravity) are regression
 from the reviews of 1.0: each failed before its fix. `window.__uiVerify` holds `{ done, passed, total, failures }` for
 automation.
 
+`compatibility.js` adds capability regressions. They shadow selected APIs
+in the fixture's real browser realm without modifying its globals: missing
+APIs must return an inconclusive result, constructor-free CSSOM must still
+find defects and healthy controls, and incomplete CSS must not claim a pass.
+The full-window control also tests the capability preflight.
+
 Notes:
 
 - The `glyphs` cases need a local Arial, Liberation Sans or DejaVu Sans (the

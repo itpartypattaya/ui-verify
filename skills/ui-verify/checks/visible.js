@@ -16,6 +16,28 @@
  * Returns: { ok, results: [{ el, verdict, reasons[], coveredBy[], points, clickTarget, clickable, hint }] }
  */
 (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'visible', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('Number.parseFloat', () => typeof Number.parseFloat === 'function');
+  needs('document.createElement', () => typeof document.createElement === 'function');
+  needs('document.elementFromPoint', () => typeof document.elementFromPoint === 'function');
+  needs('document.elementsFromPoint', () => typeof document.elementsFromPoint === 'function');
+  needs('scrollTo', () => typeof scrollTo === 'function');
+  if (missingCapabilities.length) return unsupported();
+  const parseFloat = Number.parseFloat;
+
   const { selector, scroll = true, max = 10 } = opts;
   const name = (el) => {
     let s = el.tagName.toLowerCase();

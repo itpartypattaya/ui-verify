@@ -89,7 +89,10 @@ or inside a session: `/plugin marketplace add itpartypattaya/ui-verify`, then
 
 **Other agents** that read `SKILL.md` skills: copy the same folder into their
 skills directory. Tested with Claude Code; the checks themselves are plain
-JavaScript and run anywhere.
+JavaScript for full browser page contexts. For restricted evaluation contexts,
+including Codex In-app Browser, run `checks/capabilities.js` first; unsupported
+checks return `ok: null` with the missing APIs. See the
+[browser adapters](skills/ui-verify/references/adapters.md).
 
 **No agent at all:** the files in `skills/ui-verify/checks/` are standalone
 functions. Paste one into the DevTools console, or call it from Playwright,
@@ -129,8 +132,11 @@ healthy control for each (an oklch colour on `color-mix()`, a carousel that
 must *not* count as overflow, an ellipsis that must *not* count as clipped
 text, a theme bug, a font subset without `→` and `€` …). `test/index.html`
 runs every check against it at the right width and asserts both what must be
-found and what must not: **66 / 66 pass in Chrome 152**, 31 of them
-regression cases from two independent reviews of 1.0 (Codex, Antigravity).
+found and what must not: **88 / 88 pass in Chrome 154**. All 66 existing
+cases remain, including 31 regressions from two independent reviews of 1.0
+(Codex, Antigravity); 22 more test restricted contexts and capability handling.
+The Codex In-app Browser adapter was also tested in its real read-only
+evaluation context; unsupported modes return inconclusive results.
 Run it yourself:
 
 ```bash

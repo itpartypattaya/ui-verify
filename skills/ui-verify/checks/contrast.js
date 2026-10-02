@@ -31,6 +31,31 @@
  * Returns: { ok, checked, passed, failed[] (grouped), inconclusive[], skipped, notes }
  */
 (opts = {}) => {
+  // Probe capabilities before measuring or changing the page. Browser-tool
+  // evaluation can expose a read-only DOM rather than a complete window.
+  const missingCapabilities = [];
+  const needs = (api, test) => {
+    try { if (test()) return; } catch { /* unavailable in this context */ }
+    missingCapabilities.push(api);
+  };
+  const unsupported = () => ({
+    check: 'contrast', ok: null, missingCapabilities,
+    error: 'required browser APIs are unavailable: ' + missingCapabilities.join(', '),
+    next: 'Run this check in a full page JavaScript context (Playwright/DevTools or Claude browser tools); see references/adapters.md',
+  });
+  needs('document.body', () => typeof document !== 'undefined' && !!document.body);
+  needs('getComputedStyle', () => typeof getComputedStyle === 'function');
+  needs('Number.parseFloat', () => typeof Number.parseFloat === 'function');
+  needs('document.createElement', () => typeof document.createElement === 'function');
+  needs('Canvas 2D', () => !!document.createElement('canvas').getContext('2d'));
+  needs('document.createTreeWalker', () => typeof document.createTreeWalker === 'function');
+  needs('document.createRange', () => typeof document.createRange === 'function');
+  needs('document.elementsFromPoint', () => typeof document.elementsFromPoint === 'function');
+  needs('scrollTo', () => typeof scrollTo === 'function');
+  needs('matchMedia', () => typeof matchMedia === 'function');
+  if (missingCapabilities.length) return unsupported();
+  const parseFloat = Number.parseFloat;
+
   const { selector = null, level = 'AA', max = 15, scroll = true, limit = 800, lines = 6 } = opts;
   const de = document.documentElement;
   const name = (el) => {
@@ -275,7 +300,7 @@
     };
     for (const n of chain) {
       const ancestor = n.contains(el);
-      if (!ancestor && (MEDIA.test(n.tagName) || n instanceof SVGElement)) {
+      if (!ancestor && (MEDIA.test(n.tagName) || n.namespaceURI === 'http://www.w3.org/2000/svg')) {
         if (/^(IMG|VIDEO)$/.test(n.tagName)) {
           const p = pixels(n, rect);
           if (p.colors) {
@@ -423,17 +448,17 @@
   // ---- targets
   let targets = [];
   const textParentOf = (el) => {
-    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
+    const w = document.createTreeWalker(el, 4 /* SHOW_TEXT */, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
     const t = w.nextNode();
     return t ? t.parentElement : el;
   };
   if (selector) targets = [...document.querySelectorAll(selector)].slice(0, limit).map(textParentOf);
   else {
     const seen = new Set();
-    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
+    const w = document.createTreeWalker(document.body, 4 /* SHOW_TEXT */, { acceptNode: (t) => (t.nodeValue.trim() ? 1 : 3) });
     for (let t; (t = w.nextNode()) && seen.size < limit;) {
       const p = t.parentElement;
-      if (p && !/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|OPTION|TEXTAREA|TITLE)$/.test(p.tagName) && !(p instanceof SVGElement)) seen.add(p);
+      if (p && !/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|OPTION|TEXTAREA|TITLE)$/.test(p.tagName) && p.namespaceURI !== 'http://www.w3.org/2000/svg') seen.add(p);
     }
     targets = [...seen];
   }
