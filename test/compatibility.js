@@ -83,4 +83,23 @@ export const compatibilityCases = [
   ['C22 mobile: no NodeFilter/SVG/global parseFloat still finds defect and control', 375, 'mobile.js', {}, r => [
     ['defect', has(r.smallTargets, 'm-ico1')], ['control', !has(r.smallTargets, 'm-big')],
   ], missingConstructors],
+  // a cross-origin sheet the CSSOM hides but CORS lets fetch read (Google Fonts) must not
+  // turn every sweep and every cascade answer into "inconclusive"
+  ['C23 widths: hidden but fetchable sheet is re-read', 1280, 'widths.js', { listOnly: true }, r => [
+    ['complete', r.cssCoverage.complete === true], ['fetched', r.fetchedSheets.length === 1],
+    ['its breakpoint', r.breakpoints.includes(777)], ['page breakpoints kept', r.breakpoints.includes(1024)],
+  ], w => ({ document: documentWithout(w, { styleSheets: [...w.document.styleSheets, hiddenSheet(w, 'cross.css')] }) })],
+  ['C24 rules: hidden but fetchable sheet keeps the winner', 1280, 'rules.js', { selector: '#r-target', props: ['color'] }, r => [
+    ['complete', r.ok === true], ['fetched', r.fetchedSheets.length === 1],
+    ['its rule listed', r.candidates.color.some(c => c.selector === ':where(#r-target)' && /cross\.css/.test(c.sheet))],
+    ['real winner kept', r.candidates.color[0].likelyWinner && r.candidates.color[0].selector === '#r-target'],
+  ], w => ({ document: documentWithout(w, { styleSheets: [...w.document.styleSheets, hiddenSheet(w, 'cross.css')] }) })],
+  ['C25 widths: fetched sheet with @import stays incomplete', 1280, 'widths.js', { listOnly: true }, r => [
+    ['incomplete', r.cssCoverage.complete === false], ['own media read', r.breakpoints.includes(888)],
+    ['import named', has(r.unreadableSheets, '@import')],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-import.css')] }) })],
 ];
+// a sheet whose rules throw on access, like a cross-origin <link> without CORS
+function hiddenSheet(w, file) {
+  return { href: new URL(file, w.location.href).href, media: { mediaText: '' }, get cssRules() { throw new w.DOMException('Cannot access rules', 'SecurityError'); } };
+}

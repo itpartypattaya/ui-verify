@@ -1,0 +1,5 @@
+/* Served as a "hidden" sheet by test/compatibility.js: the shim makes its
+   cssRules throw, like a cross-origin sheet without CORS, so the checks must
+   fetch and re-parse it. Never linked by the fixtures — it applies to nothing. */
+:where(#r-target) { color: rgb(9, 9, 9); }
+@media (max-width: 777px) { .cross-marker { display: none; } }

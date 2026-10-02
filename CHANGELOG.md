@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-10-03
+
+Restricted browser contexts (Codex In-app Browser) and honest CSS coverage.
 
 - Add `capabilities.js` to identify supported evaluation modes before checks.
   Each check returns `ok: null` with missing APIs and a next channel when
@@ -11,7 +13,11 @@
 - `widths { listOnly: true }` is explicitly planning-only (`ok: null`,
   `tested: 0`); report CSS coverage and distinguish access from traversal
   errors. Partial CSS cannot produce a passing sweep or a likely rule winner.
-- Add 22 capability regressions alongside all 66 existing browser tests.
+- `widths` and `rules` (now `async`) fetch and re-parse cross-origin sheets
+  the CSSOM hides when CORS allows it (Google Fonts, most CDNs) — otherwise
+  the rule above would make every site with a font CDN inconclusive.
+  Re-read sheets are listed in `fetchedSheets`.
+- Add 25 capability and coverage regressions alongside all 66 existing browser tests.
 
 ## 1.1.0 — 2026-10-03
 

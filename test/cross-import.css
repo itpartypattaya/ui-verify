@@ -1,0 +1,3 @@
+/* Like cross.css, but with an @import a fetched copy cannot follow. */
+@import url("cross.css");
+@media (min-width: 888px) { .cross-marker { display: none; } }

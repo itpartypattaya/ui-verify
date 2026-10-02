@@ -8,6 +8,8 @@
  * widths, and a grid every `step` px (default 40) for bugs no breakpoint
  * announces (scripts, container queries, fluid maths). A failure island
  * narrower than `step` that touches none of these widths can still be missed.
+ * Cross-origin sheets the CSSOM hides are re-fetched when CORS allows (Google
+ * Fonts, most CDNs); what stays unread makes cssCoverage incomplete and ok null.
  *
  *  - { listOnly: true } → just the list of widths. Use it when you drive the
  *    viewport with your browser tool (resize → overflow.js → next width).
@@ -26,7 +28,7 @@
  *
  * ok is null when a width could not be measured or the extra check could not decide.
  *
- * Returns: { ok, breakpoints[], tested, failingRanges[], ranges[{ range, overflowPx, culprits, run }], unmeasured[], undecided[] }
+ * Returns: { ok, mode, breakpoints[], cssCoverage{}, unreadableSheets[], fetchedSheets[], tested, failingRanges[], ranges[{ range, overflowPx, culprits, run }], unmeasured[], undecided[] }
  */
 async (opts = {}) => {
   // Probe capabilities before measuring or changing the page. Browser-tool
@@ -77,13 +79,46 @@ async (opts = {}) => {
       if (r.cssRules) walk(r.cssRules);
     }
   };
+  // A cross-origin sheet without CORS hides its rules from the CSSOM, but CDNs such as Google
+  // Fonts allow fetch: re-parse that text in a constructed sheet. Its @import rules are dropped.
+  const recover = async (roots) => {
+    const got = new Map();
+    if (typeof fetch !== 'function' || typeof CSSStyleSheet !== 'function' || typeof setTimeout !== 'function') return got;
+    const hidden = [];
+    const gather = (s) => {
+      let rules;
+      try { rules = s.cssRules; } catch { if (s.href) hidden.push(s); return; }
+      try { for (const r of rules) if (r.type === 3 && r.styleSheet) gather(r.styleSheet); } catch { /* reported by the walk */ }
+    };
+    roots.forEach(gather);
+    await Promise.all(hidden.map(async (s) => {
+      try {
+        const res = await Promise.race([fetch(s.href), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 3000))]);
+        if (!res.ok) return;
+        const text = await res.text();
+        const copy = new CSSStyleSheet();
+        copy.replaceSync(text);
+        got.set(s, { rules: copy.cssRules, imports: /@import/i.test(text) });
+      } catch { /* stays unreadable */ }
+    }));
+    return got;
+  };
+  const roots = [...document.styleSheets, ...(document.adoptedStyleSheets || [])];
+  const recovered = await recover(roots);
+  const fetched = [];
   const read = (s) => {
     collect(s.media && s.media.mediaText);
     let rules;
-    try { rules = s.cssRules; } catch (e) { unreadable.push({ sheet: s.href || 'inline <style>', error: String(e) }); return; }
+    try { rules = s.cssRules; } catch (e) {
+      const got = recovered.get(s);
+      if (!got) { unreadable.push({ sheet: s.href || 'inline <style>', error: String(e) }); return; }
+      rules = got.rules;
+      fetched.push(s.href);
+      if (got.imports) unreadable.push({ sheet: s.href, error: 'fetched, but its @import rules are not followed' });
+    }
     try { walk(rules); sheetsRead++; } catch (e) { traversalErrors.push({ sheet: s.href || 'inline <style>', error: String(e) }); }
   };
-  [...document.styleSheets, ...(document.adoptedStyleSheets || [])].forEach(read);
+  roots.forEach(read);
   document.querySelectorAll('source[media], link[media]').forEach((n) => collect(n.media));
   const breakpoints = [...bps].filter((v) => v >= 200 && v <= 3000).sort((a, b) => a - b);
   // max-width: 1039px + min-width: 1040px leaves 1039.01–1039.99 uncovered; at fractional zoom
@@ -94,8 +129,8 @@ async (opts = {}) => {
     .filter((v) => v >= 280 && v <= 2560)
     .sort((a, b) => a - b);
   const gapNote = gaps.length ? 'max-width N / min-width N+1 pairs leave a gap at fractional zoom — use range syntax (width < N+1px / width >= N+1px), which leaves none; max-width: N.98px only narrows it to 0.02px' : undefined;
-  const cssCoverage = { complete: !unreadable.length && !traversalErrors.length, sheetsRead, unreadable: unreadable.length, traversalErrors: traversalErrors.length };
-  const coverage = { breakpoints, gaps, gapNote, widths, cssCoverage, unreadableSheets: unreadable, traversalErrors };
+  const cssCoverage = { complete: !unreadable.length && !traversalErrors.length, sheetsRead, fetched: fetched.length, unreadable: unreadable.length, traversalErrors: traversalErrors.length };
+  const coverage = { breakpoints, gaps, gapNote, widths, cssCoverage, unreadableSheets: unreadable, fetchedSheets: fetched, traversalErrors };
   if (listOnly) return {
     check: 'widths', ok: null, mode: 'listOnly', tested: 0, ...coverage,
     note: 'planning only — no viewport was resized or measured; empty breakpoints/gaps prove nothing when cssCoverage.complete is false',
@@ -104,7 +139,6 @@ async (opts = {}) => {
   needs('document.createElement', () => typeof document.createElement === 'function');
   needs('setTimeout', () => typeof setTimeout === 'function');
   if (missingCapabilities.length) return { ...unsupported(), ...coverage, mode: 'sweep', tested: 0 };
-
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const f = document.createElement('iframe');
@@ -236,6 +270,7 @@ async (opts = {}) => {
     gaps,
     gapNote,
     unreadableSheets: unreadable,
+    fetchedSheets: fetched,
     note: 'measured in a hidden iframe copy of the page; range ends are exact (bisected) unless marked ≤/≥ (edge of the tested span). '
       + (Number.isInteger(devicePixelRatio) ? '' : `devicePixelRatio ${devicePixelRatio} is fractional: a frame of N px may really be N.2 px wide, so a max-width: N rule can already be off at N. `)
       + 'Confirm with your browser tool + overflow.js at a width inside the range',

@@ -12,7 +12,7 @@
       "name": "ui-verify",
       "source": "./",
       "description": "Verify web layout in a real browser with numbers instead of eyeballing screenshots.",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "category": "development"
     }
   ]

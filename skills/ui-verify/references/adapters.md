@@ -34,7 +34,10 @@ and `tested: 0`. It plans an external resize loop; it does not run it.
 records access errors, `traversalErrors` records failures while walking rules.
 These are different from "no media queries". A sweep with incomplete CSS
 cannot pass (a measured defect can still fail). `rules` also withholds a
-likely winner if some stylesheet rules could not be read.
+likely winner if some stylesheet rules could not be read. Before giving up on
+a cross-origin sheet, both checks fetch it and re-parse the text (listed in
+`fetchedSheets`): Google Fonts and most CDNs allow that, so only sheets
+without CORS headers, or `@import`s inside a fetched sheet, stay unread.
 
 ## Codex In-app Browser
 

@@ -12,18 +12,18 @@ visible on the screenshot, it is there. Absence can mean a defect or a channel
 failure. Same with `grep`: "found" is a fact, "not found" is a question.
 
 **A confident number is also just a channel.** A naive contrast meter that
-stops at a translucent parent can report 1.26 instead of 8.8. Checks return —
-`ok: true`, `ok: false`, `ok: null` (cannot tell, and why) — and says where
-it is unsure instead of filling the gap with a made-up number. A `true` is
+stops at a translucent parent can report 1.26 instead of 8.8. Every check
+returns `ok: true`, `ok: false` or `ok: null` (cannot tell, and why) and says
+where it is unsure instead of filling the gap with a made-up number. A `true` is
 still bounded by what the check covers: read its `notes`, `unmodelled`,
 `skipped` and `method` before treating it as proof.
 
 ## Workflow
 
-0. **Context: `checks/capabilities.js`.** Run once per evaluation context.
-   Some tools expose a read-only DOM rather than a full `window`. Use the
-   reported `availableModes`; unavailable checks return `ok: null` with
-   `missingCapabilities` and `next`. See `references/adapters.md` for Codex.
+0. **Restricted context? `checks/capabilities.js`.** Some tools (e.g. Codex
+   In-app Browser) expose a read-only DOM, not a full `window`. There, or once
+   a check returns `missingCapabilities`, run it and use only its
+   `availableModes`; see `references/adapters.md`.
 1. **Gate: `checks/settle.js`.** Viewport non-zero, document loaded, fonts in,
    images in, transitions finished. `ok: false` → fix the blockers first;
    `ok: null` → use a full page context before claiming readiness. A
@@ -58,6 +58,7 @@ Batch navigate → settle → check → screenshot in one call where the tool al
 `widths.js { listOnly: true }` plans the widths only (`ok: null`, `tested: 0`).
 Read `cssCoverage.complete`, `unreadableSheets` and `traversalErrors`; an empty
 breakpoint list from an incomplete CSS read does not establish responsive coverage.
+Cross-origin sheets are re-fetched where CORS allows (Google Fonts, CDNs).
 
 ## Complaint → check
 

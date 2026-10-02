@@ -3,7 +3,8 @@
  *
  * grep over the build answers "is the string in a file". This answers "which
  * rules match this element right now": every matching rule from every readable
- * stylesheet, with its @media/@supports/@container/@layer context, whether that
+ * stylesheet (a cross-origin sheet the CSSOM hides is re-fetched when its server
+ * allows CORS, e.g. Google Fonts), with its @media/@supports/@container/@layer context, whether that
  * context is active at the current width, !important, cascade-layer order and
  * specificity — sorted by the CSS cascade with the likely winner first, next to
  * the computed value. A candidate in a context that cannot be evaluated here
@@ -11,9 +12,9 @@
  *
  * Options: { selector (required), props = [] (empty → every property the
  *            matching rules declare, up to 40), pseudo = null ('::before' …) }
- * Returns: { ok, el, computed{}, candidates{prop: [...]}, inactive[], unreadableSheets[], notes[] }
+ * Returns: { ok, el, computed{}, candidates{prop: [...]}, inactive[], unreadableSheets[], fetchedSheets[], notes[] }
  */
-(opts = {}) => {
+async (opts = {}) => {
   // Probe capabilities before measuring or changing the page. Browser-tool
   // evaluation can expose a read-only DOM rather than a complete window.
   const missingCapabilities = [];
@@ -203,15 +204,48 @@
       }
     }
   };
+  // A cross-origin sheet without CORS hides its rules from the CSSOM, but CDNs such as Google
+  // Fonts allow fetch: re-parse that text in a constructed sheet. Its @import rules are dropped.
+  const recover = async (roots) => {
+    const got = new Map();
+    if (typeof fetch !== 'function' || typeof CSSStyleSheet !== 'function' || typeof setTimeout !== 'function') return got;
+    const hidden = [];
+    const gather = (s) => {
+      let rules;
+      try { rules = s.cssRules; } catch { if (s.href) hidden.push(s); return; }
+      try { for (const r of rules) if (r.type === 3 && r.styleSheet) gather(r.styleSheet); } catch { /* reported by the walk */ }
+    };
+    roots.forEach(gather);
+    await Promise.all(hidden.map(async (s) => {
+      try {
+        const res = await Promise.race([fetch(s.href), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 3000))]);
+        if (!res.ok) return;
+        const text = await res.text();
+        const copy = new CSSStyleSheet();
+        copy.replaceSync(text);
+        got.set(s, { rules: copy.cssRules, imports: /@import/i.test(text) });
+      } catch { /* stays unreadable */ }
+    }));
+    return got;
+  };
+  const roots = [...document.styleSheets, ...(document.adoptedStyleSheets || [])];
+  const recovered = await recover(roots);
+  const fetched = [];
   const readSheet = (sheet, ctx = [], lp = '') => {
     let rules;
-    try { rules = sheet.cssRules; } catch { unreadable.push(sheet.href || '(unknown)'); return; }
+    try { rules = sheet.cssRules; } catch {
+      const got = recovered.get(sheet);
+      if (!got) { unreadable.push(sheet.href || '(unknown)'); return; }
+      rules = got.rules;
+      fetched.push(short(sheet.href));
+      if (got.imports) unreadable.push(`${sheet.href} (its @import rules — not followed after a fetch)`);
+    }
     const media = sheet.media && sheet.media.mediaText;
     const c = media ? [...ctx, { type: '@media', text: media, active: matchMedia(media).matches }] : ctx;
     if (sheet.disabled) c.push({ type: 'disabled', text: 'stylesheet', active: false });
     try { walk(rules, c, sheet, null, lp); } catch (e) { traversalErrors.push({ sheet: short(sheet.href), error: String(e) }); }
   };
-  [...document.styleSheets, ...(document.adoptedStyleSheets || [])].forEach((s) => readSheet(s));
+  roots.forEach((s) => readSheet(s));
 
   const inlineProps = pseudo ? [] : [...el.style];
   const wanted = props.length ? props : [...new Set([...inlineProps, ...found.flatMap((f) => f.decl)])].slice(0, 40);
@@ -264,7 +298,7 @@
   const inactive = found.filter((f) => f.active === false).map((f) => ({ selector: f.selector, at: f.at.join(' › '), sheet: f.sheet }));
   const notes = [...notesFor];
   if (el.getAnimations && el.getAnimations().length) notes.push('the element has running animations/transitions — they override the declarations listed here while they run');
-  if (unreadable.length) notes.push('some stylesheet rules could not be accessed (cross-origin restrictions or unavailable CSSOM) — computed values still include them');
+  if (unreadable.length) notes.push('some stylesheet rules could not be accessed (cross-origin without CORS, or unavailable CSSOM) — computed values still include them, so no winner is named; the first candidate is only the strongest readable one');
   if (traversalErrors.length) notes.push('CSSOM traversal failed — candidates are partial and no winner is named');
   if (props.length && wanted.some((p) => !candidates[p].length)) notes.push('no rule declares some of the requested properties — the value is inherited or the initial value; check the parent');
   notes.push('state selectors (:hover, :focus, :checked) only match while that state is on; @scope proximity and shadow-DOM context are not ranked');
@@ -280,6 +314,7 @@
     candidates,
     inactive: inactive.slice(0, 15),
     unreadableSheets: unreadable,
+    fetchedSheets: fetched,
     notes,
   };
 }

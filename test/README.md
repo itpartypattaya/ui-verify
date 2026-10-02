@@ -20,7 +20,9 @@ automation.
 in the fixture's real browser realm without modifying its globals: missing
 APIs must return an inconclusive result, constructor-free CSSOM must still
 find defects and healthy controls, and incomplete CSS must not claim a pass.
-The full-window control also tests the capability preflight.
+The full-window control also tests the capability preflight. `cross.css` and
+`cross-import.css` play cross-origin sheets the CSSOM hides: the checks must
+fetch and re-read them (and report an `@import` they cannot follow).
 
 Notes:
 
