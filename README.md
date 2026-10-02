@@ -23,7 +23,9 @@ the page finishes painting, so:
 So every check here runs inside the page, measures what the browser actually
 computed, and answers in three states: `ok: true`, `ok: false` with the
 element, numbers and cause, or `ok: null` with the reason it cannot tell.
-Never a made-up number to fill the gap.
+Where a check is unsure (an effect it does not model, an image it cannot
+read) it says so instead of filling the gap with a made-up number — and every
+answer lists what it covered, so a `true` is never read as more than it is.
 
 ![How ui-verify works: gate, check, three outcomes](docs/workflow.svg)
 
@@ -34,7 +36,7 @@ Never a made-up number to fill the gap.
 | `settle` | measuring too early: 0×0 viewport of a hidden pane, fonts/images loading, transitions running, 404 assets | `blockers: ["viewport is 0×0 …"]` |
 | `overflow` | page scrolls sideways — the outermost culprit, why, and the wider child inside | `div.o-band 1100px in a 1015px section — wider than its container` |
 | `widths` | bugs that live between breakpoints: reads the page's own `@media` widths, sweeps them, bisects to the exact pixel; flags fractional-zoom gaps | `failingRanges: ["1024–1039"]`, `gaps: ["1039px/1040px"]` |
-| `contrast` | WCAG contrast against what is really under the text: translucent layers, gradients, siblings, **image pixels**; any CSS colour incl. `oklch()`, `color-mix()` | `1.55 : 1 fail` · over a photo `1.85 (pixels)` · `inconclusive, range 1–21` |
+| `contrast` | WCAG contrast against what is really under the text: translucent layers, gradients, siblings, **image pixels**; any CSS colour incl. `oklch()`, `color-mix()` | `1.55 : 1 fail` · over a photo: judged on its pixels · `inconclusive, range 1–21` |
 | `grid` | cards, tiles, covers of different size; points at `min-width: auto` blow-outs | `widths differ: 182px ×2, 512px ×1` |
 | `rules` | "my CSS didn't apply": every matching rule with `@media`/`@layer`/`@supports` context, active or not, specificity, likely winner | `.r-box (unlayered) beats @layer #r-target` |
 | `theme` | theme mechanism (class, `data-theme`, `data-bs-theme`, media); switch there and back — colours that don't return or are frozen by a transition | `stale: #t-ld color` |
@@ -51,14 +53,19 @@ Each answer comes with a fix recipe in
 
 ![How contrast.js rebuilds the background under the text](docs/contrast.svg)
 
-The check hit-tests the text, walks every layer beneath it (not just the
-parents) and composites them back together. Over a same-origin `<img>` or
-`<video>` it reads the actual pixels under the text. Where the pixels are
-unknowable (CSS background image, cross-origin), it tests every grey from
-black to white under the overlay: if even the worst case passes, the overlay
+The check hit-tests every line of the text, walks every layer beneath it
+(not just the parents) and composites them back together, including group
+opacity of ancestors and the colours *between* gradient stops. Over a
+same-origin `<img>` or `<video>` it reads the actual pixels under the text,
+about one per CSS pixel: it passes only if every sampled pixel passes. Where
+the pixels are unknowable (CSS background image, cross-origin), it computes
+the bound over any colour underneath (exact for opaque text): if even the
+worst case passes, the overlay
 guarantees legibility; if not, the answer is `inconclusive` with a range.
+Filters, blend modes and big `::before` overlays it cannot model make the
+answer `inconclusive`, with the estimate attached.
 
-### Every width, not two presets
+### Every width that matters, not two presets
 
 ![How widths.js sweeps and bisects](docs/widths.svg)
 
@@ -122,7 +129,9 @@ healthy control for each (an oklch colour on `color-mix()`, a carousel that
 must *not* count as overflow, an ellipsis that must *not* count as clipped
 text, a theme bug, a font subset without `→` and `€` …). `test/index.html`
 runs every check against it at the right width and asserts both what must be
-found and what must not: **35 / 35 pass in Chrome 152**. Run it yourself:
+found and what must not: **66 / 66 pass in Chrome 152**, 31 of them
+regression cases from two independent reviews of 1.0 (Codex, Antigravity).
+Run it yourself:
 
 ```bash
 python -m http.server 8000
@@ -147,8 +156,10 @@ checks:
 
 Not a design critic: composition, rhythm and taste remain the screenshot's
 and your job. Not a full accessibility audit (use axe-core), not pixel-diff
-visual regression, not performance. Shadow DOM and cross-origin iframes are
-not traversed. Contrast follows WCAG 2.x, not APCA.
+visual regression, not performance. Shadow DOM and iframe contents (even
+same-origin) are not traversed. `widths` samples every 40 px plus every
+breakpoint edge — a failure island narrower than that, announced by no
+breakpoint, can slip through. Contrast follows WCAG 2.x, not APCA.
 
 ## Repository
 

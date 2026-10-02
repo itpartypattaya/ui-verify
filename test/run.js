@@ -89,7 +89,7 @@ const cases = [
   ['theme: page left as found after the cycle', 1280, 'contrast.js', { selector: '#t-ld' }, (r) => [['#t-ld still readable', r.results[0].status === 'pass']]],
 
   ['glyphs: subset lacks → and €', 1280, 'glyphs.js', { family: 'Subset', chars: 'A«→€' }, (r) => [
-    ['family loaded', r.familyLoaded], ['→ € missing', r.missing.includes('→') && r.missing.includes('€')], ['A « present', !r.missing.includes('A') && !r.missing.includes('«')]]],
+    ['family available', r.familyAvailable], ['→ € missing', r.missing.includes('→') && r.missing.includes('€')], ['A « present', !r.missing.includes('A') && !r.missing.includes('«')]]],
   ['glyphs: from an element', 1280, 'glyphs.js', { selector: '#g-text' }, (r) => [['→ missing', r.missing.includes('→')], ['A not missing', !r.missing.includes('A')]]],
 
   ['visible: static text under an absolute image', 1280, 'visible.js', { selector: '#v-static-title' }, (r) => [
@@ -114,6 +114,54 @@ const cases = [
     ['oversized', has(r.oversized, 'i-oversized')], ['noAlt', has(r.noAlt, 'i-noalt')], ['noDimensions', has(r.noDimensions, 'i-nodims')],
     ['i-ok clean', !JSON.stringify(r).includes('i-ok')]]],
 
+  // ---- regressions from the 1.0 review (each failed before its fix) ----
+  ['R1 contrast: gradient midpoint, not just its ends', 1280, 'contrast.js', { selector: '#r1' }, (r) => [['not a pass', r.results[0].status === 'fail']]],
+  ['R3 contrast: ancestor opacity composited as a group', 1280, 'contrast.js', { selector: '#r3' }, (r) => [
+    ['pass (black on ~#808080 ≈ 5.3)', r.results[0].status === 'pass'], ['ratio 5–5.6', r.results[0].ratio > 5 && r.results[0].ratio < 5.6]]],
+  ['R4 contrast: filter on the text is not modelled → inconclusive', 1280, 'contrast.js', { selector: '#r4' }, (r) => [['inconclusive', r.results[0].status === 'inconclusive']]],
+  ['R5 contrast: a bright strip under part of the text is not averaged away', 1280, 'contrast.js', { selector: '#r5' }, (r) => [
+    ['not a pass', !r.results[0].status.startsWith('pass')], ['pixels read', r.results[0].method === 'stack+pixels']]],
+  ['R8 contrast: nested scroller restored', 1280, 'contrast.js', { selector: '#r8' }, (r, d) => [['scrollTop back to 0', d.getElementById('r8box').scrollTop === 0], ['measured', r.results[0].method === 'stack']]],
+  ['R10 contrast: transparent PNG pixels show the black below', 1280, 'contrast.js', { selector: '#r10' }, (r) => [
+    ['pass', r.results[0].status === 'pass'], ['ratio ≈ 21', r.results[0].ratio > 20]]],
+  ['R11 contrast: every line measured, worst wins', 1280, 'contrast.js', { selector: '#r11' }, (r) => [['fail (2nd line white on white)', r.results[0].status === 'fail']]],
+  ['R12 contrast: transparent text fill is not judged by color', 1280, 'contrast.js', { selector: '#r12' }, (r) => [['inconclusive', r.results[0].status === 'inconclusive']]],
+  ['R13 rules: later named layer beats earlier, regardless of specificity', 1280, 'rules.js', { selector: '#r13', props: ['color'] }, (r) => [
+    ['computed blue', r.computed.color === 'rgb(0, 0, 255)'], ['winner .r13', r.candidates.color[0].selector.includes('.r13') && r.candidates.color[0].likelyWinner]]],
+  ['R14 rules: :is() specificity is its max argument', 1280, 'rules.js', { selector: '#r14', props: ['margin-left'] }, (r) => [
+    ['computed 2px', r.computed['margin-left'] === '2px'], ['winner .ra.rb', r.candidates['margin-left'][0].selector === '.ra.rb']]],
+  ['R15 rules: non-matching @scope is not active', 1280, 'rules.js', { selector: '.r15', props: ['padding-left'] }, (r) => [
+    ['computed 0px', r.computed['padding-left'] === '0px'], ['scoped rule inactive', r.candidates['padding-left'].every((c) => c.active !== true)]]],
+  ['R16 rules: `all` counts as a candidate', 1280, 'rules.js', { selector: '#r16', props: ['color'] }, (r) => [['winner #r16', r.candidates.color[0].selector.includes('#r16')]]],
+  ['R6/7 theme: clone keeps content; invalid selector → error, theme untouched', 1280, 'theme.js', { cycle: true, selectors: ['#t-empty', '['] }, (r, d) => [
+    ['returns an error', !!r.error], ['theme still light', d.documentElement.dataset.theme === 'light']]],
+  ['R6 theme: :not(:empty) element is not "stale"', 1280, 'theme.js', { cycle: true, selectors: ['#t-empty'] }, (r) => [['not stale', !has(r.stale, '#t-empty')]]],
+  ['R17 visible: clip-path inset(0) is visible', 1280, 'visible.js', { selector: '#r17' }, (r) => [['visible', r.results[0].verdict === 'visible']]],
+  ['R18 visible: overflow-x clip leaves vertical overflow visible', 1280, 'visible.js', { selector: '#r18a' }, (r) => [['visible', r.results[0].verdict === 'visible']]],
+  ['R18 visible: fixed inside a transformed clipper is clipped', 1280, 'visible.js', { selector: '#r18b' }, (r) => [['hidden', r.results[0].verdict === 'hidden']]],
+  ['R19 visible: an opacity-0 image does not cover (but takes the click)', 1280, 'visible.js', { selector: '#r19' }, (r) => [
+    ['visible', r.results[0].verdict === 'visible'], ['not clickable', r.results[0].clickable === false]]],
+  ['R20 clipped: fixed box and a scroller inside a clipping panel', 1280, 'clipped.js', {}, (r) => [
+    ['fixed banner clipped', r.issues.some((i) => i.box.includes('#r20'))], ['outer panel clips scroller text', has(r.issues, 'r20outer')]]],
+  ['R22 widths: script-only island between breakpoints', 1280, 'widths.js', {}, (r) => [['1100–1150 found', r.failingRanges.includes('1100–1150')]]],
+  ['R23 overflow: protrusion to the non-scrollable side is not overflow', 1280, 'overflow.js', {}, (r) => [
+    ['ok', r.ok === true], ['listed separately', has(r.offscreenOtherSide, 'r23')]]],
+  ['R24/25 images: 2x srcset not blurry; CSS-sized image has room reserved', 1280, 'images.js', {}, (r) => [
+    ['r24 not blurry', !has(r.blurry, 'r24')], ['r25 not noDimensions', !has(r.noDimensions, 'r25')], ['i-nodims still flagged', has(r.noDimensions, 'i-nodims')]]],
+  ['R26 grid: missing selection is not a pass', 1280, 'grid.js', { cells: '.does-not-exist' }, (r) => [['ok null', r.ok === null]]],
+  ['R27 glyphs: installed font is not "not loaded"', 1280, 'glyphs.js', { family: 'Arial', chars: 'A' }, (r) => [['available', r.familyAvailable === true], ['no "not loaded" note', !/not loaded/.test(r.note || '')]]],
+
+  // ---- regressions from the second review (Antigravity) ----
+  ['A1 clipped: vertical spill out of an x-only clipper', 1280, 'clipped.js', {}, (r) => [['#a1 spills', r.issues.some((i) => i.kind === 'spills' && i.box.includes('#a1'))]]],
+  ['A3 rules: inline-only property listed', 1280, 'rules.js', { selector: '#a3' }, (r) => [
+    ['letter-spacing present', !!r.candidates['letter-spacing']], ['inline winner', (r.candidates['letter-spacing'] || [])[0]?.selector === 'style="" (inline)']]],
+  ['A4 visible: fixed inside backdrop-filter is clipped', 1280, 'visible.js', { selector: '#a4' }, (r) => [['hidden', r.results[0].verdict === 'hidden']]],
+  ['A4 visible: fixed inside a size container is clipped', 1280, 'visible.js', { selector: '#a4b' }, (r) => [['hidden', r.results[0].verdict === 'hidden']]],
+  ['A6 contrast: a thin bright line under the text is not averaged away', 1280, 'contrast.js', { selector: '#a6' }, (r) => [['not a pass', !r.results[0].status.startsWith('pass')]]],
+  ['A7 mobile: contenteditable under 16px zooms on iOS', 375, 'mobile.js', {}, (r) => [['m-ce listed', has(r.smallInputs, 'm-ce')]]],
+  ['A8 theme: SVG fill probed (stale or switching)', 1280, 'theme.js', { cycle: true, selectors: ['#t-svg'] }, (r) => [
+    ['fill probed', '#t-svg fill' in r.probe.before], ['stale or changed', has(r.stale, '#t-svg fill') || r.probe.other['#t-svg fill'] !== r.probe.before['#t-svg fill']]]],
+
   ['mobile: phone basics at 375', 375, 'mobile.js', {}, (r) => [
     ['maximum-scale flagged', has(r.viewportMeta.issues, 'maximum-scale')], ['10px text', has(r.smallText, 'm-tiny')], ['14px input', has(r.smallInputs, 'm-input')],
     ['crowded icons', has(r.smallTargets, 'm-ico1') && has(r.smallTargets, 'm-ico2')], ['spaced icon passes', !has(r.smallTargets, 'm-lonely')],
@@ -130,7 +178,7 @@ for (const [title, width, file, opts, assert] of cases) {
     const f = await frameAt(width);
     const fn = f.contentWindow.eval('(' + (await load(file)) + '\n)');
     result = await fn(opts);
-    checks = assert(result);
+    checks = assert(result, f.contentDocument);
   } catch (e) {
     result = { error: String(e && e.stack || e) };
     checks = [['ran without throwing', false]];

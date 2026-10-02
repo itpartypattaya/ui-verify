@@ -62,20 +62,32 @@
 
     // (b) clipping ancestors, nearest first
     let clippedBy = null;
+    let live = rects; // the parts of the text that are still reachable on screen
     for (let a = block; a && a !== document.documentElement; a = a.parentElement) {
       const cs = getComputedStyle(a);
-      if (cs.position === 'fixed') break;
       const ox = cs.overflowX;
       const oy = cs.overflowY;
-      if (/auto|scroll/.test(ox) || /auto|scroll/.test(oy)) break;
-      if (ox === 'visible' && oy === 'visible') continue;
+      if (/auto|scroll/.test(ox) || /auto|scroll/.test(oy)) {
+        // text beyond a scroller's box is reachable by scrolling; only what shows inside its
+        // box can still be cut by a clipper further out
+        const pb = padBox(a);
+        live = live
+          .map((r) => ({ left: Math.max(r.left, pb.l), right: Math.min(r.right, pb.r), top: Math.max(r.top, pb.t), bottom: Math.min(r.bottom, pb.b) }))
+          .filter((r) => r.right > r.left && r.bottom > r.top);
+        if (!live.length || cs.position === 'fixed') break;
+        continue;
+      }
+      if (ox === 'visible' && oy === 'visible') {
+        if (cs.position === 'fixed') break; // nothing above a fixed box clips it (transformed ancestors aside)
+        continue;
+      }
       const ar = a.getBoundingClientRect();
       if (ar.width <= 2 || ar.height <= 2 || cs.clip !== 'auto' || /inset\(50%/.test(cs.clipPath)) {
         if (!counted.has(a)) { counted.add(a); intentional.visuallyHidden++; }
         clippedBy = 'intentional';
         break;
       }
-      const o = beyond(rects, padBox(a), tolY);
+      const o = beyond(live, padBox(a), tolY);
       // only the axis that clips hides anything: overflow-x: clip leaves vertical overflow visible
       if (ox === 'visible') o.x = 0;
       if (oy === 'visible') o.y = 0;
@@ -96,13 +108,18 @@
         clippedBy = a;
         break;
       }
+      if (cs.position === 'fixed') break; // the fixed box itself was inspected; its ancestors do not clip it
     }
     if (clippedBy) continue;
 
-    // (a) spilling out of its own block box (overflow: visible all the way)
+    // (a) spilling out of its own block box, on every axis that does not clip
+    // (overflow-x: clip keeps overflow-y visible, so text can still fall out of the bottom)
     const bcs = getComputedStyle(block);
-    if (bcs.overflowX === 'visible' && bcs.overflowY === 'visible' && block !== document.body) {
+    const scrolls = /auto|scroll/.test(bcs.overflowX) || /auto|scroll/.test(bcs.overflowY);
+    if (!scrolls && block !== document.body) {
       const o = beyond(rects, padBox(block), tolY);
+      if (bcs.overflowX !== 'visible') o.x = 0;
+      if (bcs.overflowY !== 'visible') o.y = 0;
       if (o.x || o.y) {
         const k = 'spills|' + name(block);
         if (!issues.has(k)) {

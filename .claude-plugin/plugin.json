@@ -1,6 +1,6 @@
 {
   "name": "ui-verify",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Verify web layout in a real browser with numbers instead of eyeballing screenshots: overflow and its culprit, contrast over real backgrounds, uneven grids, CSS cascade, theme switch, glyphs, covered elements, clipped text, images, mobile basics, every breakpoint.",
   "author": {
     "name": "itpartypattaya",

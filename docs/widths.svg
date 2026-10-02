@@ -43,7 +43,7 @@
     <rect x="752" y="120" width="60" height="28" rx="14" fill="rgba(8,51,68,0.4)" stroke="#22d3ee"/>
     <text x="782" y="138" fill="#22d3ee" font-size="11" font-weight="600" text-anchor="middle">1040</text>
   </g>
-  <text x="556" y="166" class="s">each tested at bp−1, bp, bp+1 + 10 device widths</text>
+  <text x="556" y="166" class="s">bp−1, bp, bp+1 · device widths · a 40 px grid</text>
 
   <!-- step 2: ruler 320..1920 → x 60..900 -->
   <text x="30" y="204" class="h">2 · sweep, then bisect every pass/fail boundary</text>
@@ -51,14 +51,15 @@
   <!-- bisect callout -->
   <rect x="300" y="216" width="600" height="44" rx="6" fill="#0f172a"/>
   <rect x="300" y="216" width="600" height="44" rx="6" fill="rgba(59,130,246,0.18)" stroke="#60a5fa" stroke-width="1"/>
-  <text x="314" y="234" fill="#60a5fa" font-size="10.5" font-weight="600">bisect 501 ✗ … 768 ✓</text>
-  <text x="314" y="250" class="n">634 ✗  701 ✓  667 ✗  684 ✓  675 ✗  679 ✗  681 ✗  682 ✓  → edge 681 | 682</text>
+  <text x="314" y="234" fill="#60a5fa" font-size="10.5" font-weight="600">bisect 680 ✗ … 720 ✓</text>
+  <text x="314" y="250" class="n">700 ✓   690 ✓   685 ✓   682 ✓   681 ✗   → edge 681 | 682, exact to the pixel</text>
   <path d="M300 250 H262 V292" fill="none" stroke="#60a5fa" stroke-width="1" stroke-dasharray="3,3"/>
 
   <!-- axis -->
   <line x1="60" y1="300" x2="900" y2="300" stroke="#475569" stroke-width="2"/>
   <rect x="60" y="292" width="189.5" height="16" fill="rgba(136,19,55,0.55)" stroke="#fb7185" stroke-width="1"/>
   <rect x="429.6" y="292" width="8" height="16" fill="rgba(136,19,55,0.55)" stroke="#fb7185" stroke-width="1"/>
+  <rect x="469.5" y="292" width="26.3" height="16" fill="rgba(136,19,55,0.55)" stroke="#fb7185" stroke-width="1"/>
   <!-- device widths -->
   <g fill="#94a3b8">
     <circle cx="60" cy="300" r="3.5"/><circle cx="81" cy="300" r="3.5"/><circle cx="88.9" cy="300" r="3.5"/>
@@ -72,14 +73,15 @@
   </g>
   <!-- bisection probes -->
   <g fill="#60a5fa">
-    <circle cx="224.9" cy="300" r="2.5"/><circle cx="260" cy="300" r="2.5"/><circle cx="242.2" cy="300" r="2.5"/>
-    <circle cx="251.1" cy="300" r="2.5"/><circle cx="246.4" cy="300" r="2.5"/>
+    <circle cx="259.5" cy="300" r="2.5"/><circle cx="254.3" cy="300" r="2.5"/><circle cx="251.6" cy="300" r="2.5"/>
+    <circle cx="250" cy="300" r="2.5"/><circle cx="249.5" cy="300" r="2.5"/>
   </g>
   <g class="s" text-anchor="middle">
     <text x="60" y="326">320</text>
     <text x="249.5" y="326" fill="#fb7185">681</text>
     <text x="295.2" y="326">768</text>
-    <text x="433" y="326" fill="#fb7185">1024–1039</text>
+    <text x="420" y="326" fill="#fb7185">1024–1039</text>
+    <text x="492" y="342" fill="#fb7185">1100–1150</text>
     <text x="564" y="326">1280</text>
     <text x="648" y="326">1440</text>
     <text x="900" y="326">1920</text>
@@ -120,11 +122,11 @@
   </g>
   <polygon points="450.9,448 445,438 456.8,438" fill="#fbbf24"/>
   <text x="458" y="494" fill="#fb7185" font-size="10.5" font-weight="600">1039.01–1039.99: no rule applies</text>
-  <text x="44" y="514" class="n">a 1039px frame at 125 % zoom is 1039.2 CSS px wide (▲) — falls into the gap · fix: max-width: 1039.98px  or  width &lt; 1040px</text>
+  <text x="44" y="514" class="n">a 1039px frame at 125 % zoom is 1039.2 CSS px wide (▲) — falls into the gap · fix: width &lt; 1040px / width &gt;= 1040px — no gap</text>
 
   <!-- output -->
   <rect x="30" y="548" width="900" height="44" rx="6" fill="#0f172a"/>
   <rect x="30" y="548" width="900" height="44" rx="6" fill="rgba(6,78,59,0.3)" stroke="#34d399" stroke-width="1"/>
   <text x="44" y="567" fill="#34d399" font-size="11" font-weight="600">result</text>
-  <text x="44" y="583" class="n">failingRanges: ["≤320–681", "1024–1039"] at 100 % zoom — "1024–1038" at 125 % · gaps: ["1039px/1040px"]</text>
+  <text x="44" y="583" class="n">failingRanges: ["≤320–681", "1024–1039", "1100–1150"] (100 % zoom; the last one is script-only) · gaps: ["1039px/1040px"]</text>
 </svg>

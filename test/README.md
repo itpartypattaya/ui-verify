@@ -12,7 +12,8 @@ python -m http.server 8000
 ```
 
 Open `http://localhost:8000/test/`. Rows turn green or red; click a row to see
-the raw JSON. `window.__uiVerify` holds `{ done, passed, total, failures }` for
+the raw JSON. Cases named `R…` (Codex) and `A…` (Antigravity) are regressions
+from the reviews of 1.0: each failed before its fix. `window.__uiVerify` holds `{ done, passed, total, failures }` for
 automation.
 
 Notes:

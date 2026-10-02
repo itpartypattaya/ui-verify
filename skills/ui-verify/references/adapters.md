@@ -8,8 +8,11 @@ tool can accept it:
   Pass the file text as-is (no options), or wrap it to pass options:
   `async () => (<file text>)({ selector: '.card' })`.
 - **Expression-style (REPL)** — the tool evaluates an expression and returns
-  the last value. Use `await (<file text>)({ … })`. Top-level `await` is
-  needed for the async checks (`settle`, `theme`, `glyphs`, `widths`).
+  the last value. Use `await (<file text>)({ … })` where the tool supports
+  top-level `await` (Claude's `javascript_tool`, the DevTools console). Where
+  it does not, return the promise — `(<file text>)({ … })` — if the tool
+  awaits it (Playwright/Puppeteer `page.evaluate` do). Async checks:
+  `settle`, `theme`, `glyphs`, `widths`, `images`.
 
 Return values are JSON. Never return DOM nodes — the checks already return
 names like `div.card#promo` and short text samples.

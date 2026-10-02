@@ -18,8 +18,10 @@ fact, "not found" is a question.
 **A confident number is also just a channel.** A naive contrast meter that
 stops at the first translucent parent reports 1.26 where the truth is 8.8, and
 the next agent "fixes" working CSS. Every check here returns three states —
-`ok: true`, `ok: false`, `ok: null` (cannot tell, and why) — and never a
-made-up number to fill the gap.
+`ok: true`, `ok: false`, `ok: null` (cannot tell, and why) — and says where
+it is unsure instead of filling the gap with a made-up number. A `true` is
+still bounded by what the check covers: read its `notes`, `unmodelled`,
+`skipped` and `method` before treating it as proof.
 
 The cost of a wrong conclusion is not a crash: you go and fix what works, and
 break it on the way.
@@ -28,15 +30,18 @@ break it on the way.
 
 1. **Gate: `checks/settle.js`.** Viewport non-zero, document loaded, fonts in,
    images in, transitions finished. `ok: false` → fix the blockers first. A
-   hidden preview pane has a 0×0 viewport and every geometric number from it
-   is fiction that looks like data — set an explicit viewport size.
+   collapsed or hidden preview pane can report a 0×0 viewport (hidden alone
+   does not mean zero — check), and every geometric number from a 0×0
+   viewport is fiction that looks like data — set an explicit viewport size.
 2. **Measure** with the check that matches the complaint (table below).
 3. **Screenshot** only for what numbers don't measure: composition, rhythm,
    whitespace, "cheap or premium". Not for colour, not for "did it apply".
-4. **Conclude by the numbers.** If the screenshot disagrees with a
-   measurement, the measurement wins — unless the screenshot shows something
-   *present* that the numbers say is absent; that is a positive result, and
-   it means you measured the wrong axis (usually: run `visible.js`).
+4. **Conclude by the numbers.** A screenshot that *doesn't show* something
+   does not overrule a measurement. A screenshot that *shows* something the
+   numbers say is absent is a positive result: you measured the wrong axis
+   (usually: run `visible.js`). When the two disagree in any other way,
+   re-check the measurement's assumptions (`notes`, `method`) before
+   trusting either.
 5. **Report with numbers**: "3 cards 299×168, no overflow at 320–1920" is
    checkable; "looks fine" is not.
 
@@ -105,25 +110,20 @@ errors in the log" are all negative results.
 
 ## Traps worth knowing
 
-- **Fractional zoom gap.** `max-width: 1039px` + `min-width: 1040px` leaves
-  1039.01–1039.99 uncovered; at Windows 125 % scaling or browser zoom the
-  viewport lands there and neither rule applies. `widths.js` reports such
-  pairs (`gaps`). Fix: `max-width: 1039.98px` or `width < 1040px`.
+- **Fractional zoom gap.** `max-width: 1039px` + `min-width: 1040px` miss
+  1039.01–1039.99, where a 125 %-scaled viewport really lands. `widths.js`
+  reports such `gaps`; range syntax (`width < 1040px` / `>= 1040px`) fixes it.
 - **Reveal-on-scroll.** Elements waiting for an IntersectionObserver have
   opacity 0; checks skip invisible elements and say so. Scroll the page, re-run.
-- **Theme set by an inline `<head>` script** before first paint: a measurement
-  taken earlier shows the other theme. `settle.js` reports the theme context.
-- **Transition + `light-dark()`** (Chromium, confirmed in 152): the colour
-  stays at the old theme. `theme.js { cycle: true }` reports it as `stale`.
-- **Measure the build you edited.** Rebuilt? Reloaded? Otherwise you argue
-  with the old version.
-- **Viewport emulation may reset between turns** in some tools. Set it again
-  before measuring; reset to default as the last step, not in the middle.
+- **Transition + `light-dark()`** (Chromium 152): the colour stays at the old
+  theme; `theme.js { cycle: true }` reports it as `stale`.
+- **Measure the build you edited** (rebuilt, reloaded), at a viewport you set
+  this turn — some tools reset emulation between turns; reset it last.
 
 ## What this skill does not do
 
 It does not judge composition or taste — that is the screenshot and your eye.
 It is not a full accessibility audit (use axe-core for that), not pixel-diff
-visual regression, not performance (Lighthouse). Shadow DOM and iframes are
-not traversed — run the check inside the frame, or on the shadow host's
-content via the page's own tooling.
+visual regression, not performance (Lighthouse). Shadow DOM and iframe
+contents (same-origin ones included) are not traversed — run the check inside
+the frame, or on the shadow host's content via the page's own tooling.

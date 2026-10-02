@@ -15,7 +15,7 @@ fix is done when the number changed, not when the screenshot "looks better".
 | `width: 100vw` element | `vw` includes the vertical scrollbar | `width: 100%`, or `100dvw` only where there is no scrollbar |
 | shifted out (offset/transform/negative margin) | off-canvas menu, decorative shape, AOS-style `translateX` | clip the section: `overflow-x: clip` on that section (not on `body`) |
 | `masked` is set | `overflow-x: hidden` on `html`/`body` hides the scrollbar, content is still cut off | fix the culprit; if you must clip, prefer `overflow-x: clip` (does not create a scroll container, keeps `position: sticky` working) |
-| only between two breakpoints | `max-width: N` / `min-width: N+1` gap at fractional zoom, or a rule tuned for one side only | `max-width: N.98px` or range syntax `@media (width < 1040px)` |
+| only between two breakpoints | `max-width: N` / `min-width: N+1` gap at fractional zoom, or a rule tuned for one side only | complementary range syntax `(width < 1040px)` / `(width >= 1040px)` — no gap at all; `max-width: N.98px` only narrows it |
 
 ## Contrast (`contrast.js`)
 
@@ -28,8 +28,10 @@ fix is done when the number changed, not when the screenshot "looks better".
 | gradient button, one end fails | the result shows the worst stop; adjust that stop or the text colour |
 | placeholder text | not measured here (pseudo-element); keep ≥ 4.5:1 if it carries information |
 
-Thresholds (WCAG 2.x AA): 4.5:1 normal text, 3:1 large (≥ 24px, or ≥ 18.66px bold)
-and UI components/icons. AAA: 7:1 / 4.5:1. Disabled controls are exempt.
+Thresholds (WCAG 2.x, SC 1.4.3): 4.5:1 normal text, 3:1 large text (≥ 18pt ≈ 24px,
+or ≥ 14pt ≈ 18.67px bold). AAA (1.4.6): 7:1 / 4.5:1. Disabled controls are exempt.
+UI components and meaningful graphics are a separate criterion (1.4.11, 3:1, with
+its own exceptions) — this check measures text only.
 
 ## Uneven cards (`grid.js`)
 
@@ -57,7 +59,7 @@ and UI components/icons. AAA: 7:1 / 4.5:1. Disabled controls are exempt.
 |---|---|
 | `stuck` (colour does not come back) | JS sets inline styles on switch and never resets — move colours to CSS variables/selectors |
 | `stale` (transition froze the old colour) | disable transitions while switching: add `.theme-switching * { transition: none !important }` to `<html>`, switch, remove after two `requestAnimationFrame` callbacks |
-| `unchanged` colours | hard-coded colour instead of a token |
+| `unchanged` colours | often intentional (brand colour in both themes); if not, a hard-coded colour instead of a theme token |
 | flash of the wrong theme on load | set the theme in a blocking inline `<head>` script before CSS paints; add `<meta name="color-scheme" content="light dark">` |
 
 ## Missing glyphs (`glyphs.js`)
@@ -71,7 +73,7 @@ subsets are per file.
 
 | Cause | Fix |
 |---|---|
-| static element under an absolutely positioned sibling | `position: relative` on the element (+ `z-index` if needed) — `z-index` does nothing on `position: static` |
+| static element under an absolutely positioned sibling | `position: relative` on the element (+ `z-index` if needed) — `z-index` does nothing on a static box, except on flex and grid items |
 | `z-index: 9999` and still under | the parent creates a stacking context (`transform`, `opacity < 1`, `filter`, `isolation`, `position` + `z-index`) — raise the parent, not the child |
 | dropdown/tooltip cut off | an ancestor has `overflow: hidden` — move it out (portal, `popover` attribute, `<dialog>`), or remove the clip |
 | visible but clicks go elsewhere | a transparent overlay on top — `pointer-events: none` on the overlay |

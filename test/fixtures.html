@@ -60,6 +60,8 @@
   .t-probe { color: #111; background: #fafafa; }
   [data-theme="dark"] .t-probe { color: #f0f0f0; background: #101010; }
   .t-ld { color: light-dark(#111111, #eeeeee); transition: color 0.3s; }
+  .t-empty { color: rgb(0, 0, 255); }
+  .t-empty:not(:empty) { color: rgb(255, 0, 0); }
 
   /* ---------- visible ---------- */
   .v-hero { position: relative; height: 120px; margin-top: 8px; }
@@ -93,6 +95,60 @@
   .m-icons button, #m-lonely { width: 16px; height: 16px; padding: 0; border: 1px solid #888; background: #fff; }
   .m-island { padding: 40px; }
   #m-big { min-width: 44px; min-height: 44px; }
+
+  /* ---------- regression cases from the 1.0 review ---------- */
+  #rv section, #rv > div { margin-top: 10px; }
+  #r1 { color: #767676; background: linear-gradient(90deg, #000, #fff); padding: 8px; }
+  .r3wrap { background: #000; padding: 8px; }
+  .r3panel { background: #fff; opacity: 0.5; padding: 8px; }
+  #r3 { color: #000; margin: 0; }
+  .r4host { background: #fff; padding: 8px; }
+  #r4 { display: inline-block; color: #000; filter: invert(1); }
+  .r5 { position: relative; width: 400px; height: 60px; }
+  .r5 img { position: absolute; inset: 0; width: 400px; height: 60px; }
+  #r5 { position: relative; margin: 0; padding: 18px 0 0 0; color: #fff; width: 300px; }
+  .r8box { height: 80px; overflow: auto; }
+  .r8box .r8spacer { height: 400px; }
+  .r10 { position: relative; background: #000; height: 50px; }
+  .r10 img { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #r10 { position: relative; color: #fff; margin: 0; padding: 12px; }
+  .r11 { position: relative; width: 220px; height: 80px; }
+  .r11 .top { position: absolute; left: 0; top: 0; width: 220px; height: 40px; background: #000; }
+  .r11 .bottom { position: absolute; left: 0; top: 40px; width: 220px; height: 40px; background: #fff; }
+  #r11 { position: relative; margin: 0; color: #fff; line-height: 40px; font-size: 16px; }
+  #r12 { color: #000; -webkit-text-fill-color: transparent; background: #fff; }
+  @layer ra, rb;
+  @layer ra { #r13 { color: rgb(255, 0, 0); } }
+  @layer rb { .r13 { color: rgb(0, 0, 255); } }
+  .ra.rb { margin-left: 2px; }
+  :is(.ra, .rb, .rc) { margin-left: 1px; }
+  @scope (.r15-other) { .r15 { padding-left: 9px; } }
+  .r16 { color: rgb(255, 0, 0); }
+  #r16 { all: initial; }
+  #r17 { clip-path: inset(0); }
+  .r18a { overflow-x: clip; overflow-y: visible; height: 20px; position: relative; }
+  #r18a { position: relative; top: 30px; }
+  .r18b { transform: translateZ(0); overflow: hidden; width: 100px; height: 30px; position: relative; margin-top: 40px; }
+  #r18b { position: fixed; left: 300px; top: 0; }
+  .r19 { position: relative; display: inline-block; }
+  .r19 img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+  #r20 { position: fixed; right: 0; bottom: 0; width: 120px; height: 20px; overflow: hidden; background: #ffe; font-size: 12px; z-index: 5; }
+  .r20outer { height: 40px; overflow: hidden; }
+  .r20scroller { height: 200px; overflow: auto; }
+  #r20b { margin-top: 100px; }
+  #r23 { position: relative; left: -50px; width: 100px; height: 10px; background: #eee; }
+  #r24 { width: 400px; height: 400px; }
+  /* second review (Antigravity) */
+  #a1 { overflow-x: clip; height: 20px; width: 200px; background: #f4f4f4; }
+  .a4 { backdrop-filter: blur(2px); overflow: hidden; width: 100px; height: 30px; position: relative; margin-top: 10px; }
+  .a4b { container-type: inline-size; overflow: hidden; width: 100px; height: 30px; margin-top: 10px; }
+  #a4, #a4b { position: fixed; left: 300px; top: 0; }
+  .a6 { position: relative; width: 400px; height: 60px; }
+  .a6 img { position: absolute; inset: 0; width: 400px; height: 60px; }
+  #a6 { position: relative; margin: 0; padding: 18px 0 0 0; color: #fff; width: 300px; }
+  #m-ce { font-size: 14px; border: 1px solid #888; min-height: 24px; }
+  .t-svg { fill: light-dark(#111111, #eeeeee); transition: fill 0.3s; }
+  #r25 { width: 120px; height: 60px; }
 </style>
 </head>
 <body>
@@ -192,6 +248,40 @@
   <button id="m-big">OK</button>
 </section>
 
+<section id="rv">
+  <h2>Review regressions</h2>
+  <p id="r1">Mid-grey text over a black-to-white gradient.</p>
+  <div class="r3wrap"><div class="r3panel"><p id="r3">Black text on a half-transparent white panel over black.</p></div></div>
+  <div class="r4host"><span id="r4">Inverted by a filter</span></div>
+  <div class="r5"><img data-strip="400x60" alt=""><p id="r5">White text over a dark photo with one bright strip</p></div>
+  <div class="r8box" id="r8box"><div class="r8spacer"></div><p id="r8">Text deep inside a scroller.</p></div>
+  <div class="r10"><img data-clear="200x50" alt=""><p id="r10">White text over a transparent PNG on black.</p></div>
+  <div class="r11"><div class="top"></div><div class="bottom"></div><p id="r11">First line on black<br>Second line on white</p></div>
+  <p id="r12">Transparent text fill</p>
+  <p id="r13" class="r13">Layer order</p>
+  <p id="r14" class="ra rb rc">:is() specificity</p>
+  <p class="r15">Scoped rule must not apply</p>
+  <p id="r16" class="r16">all: initial</p>
+  <button id="r17">Clip-path inset(0)</button>
+  <div class="r18a"><span id="r18a">Below an x-only clipper</span></div>
+  <div class="r18b"><span id="r18b">Fixed inside a transformed clipper</span></div>
+  <div class="r19"><button id="r19">Go</button><img data-gen="60x30" alt=""></div>
+  <div id="r20">Fixed banner text that is far too long for its small fixed box</div>
+  <div class="r20outer"><div class="r20scroller"><p id="r20b">Hidden by the outer panel, not by the scroller</p></div></div>
+  <div id="r22">Oversized only between 1100 and 1150px by a script</div>
+  <div id="r23"></div>
+  <img id="r24" alt="2x source">
+  <img id="r25" data-gen="120x60" alt="CSS-sized">
+  <p class="t-empty" id="t-empty">Not empty</p>
+  <div id="a1">Text in a box that clips only horizontally, far too long for its fixed height, so it spills out of the bottom.</div>
+  <p id="a3" style="letter-spacing: 2px">Inline-only property</p>
+  <div class="a4"><span id="a4">Fixed inside a backdrop-filter clipper</span></div>
+  <div class="a4b"><span id="a4b">Fixed inside a size container</span></div>
+  <div class="a6"><img data-line="400x60" alt=""><p id="a6">White text over a dark photo with a thin bright line</p></div>
+  <div id="m-ce" contenteditable="true">Editable note</div>
+  <svg id="t-svg" class="t-svg" width="20" height="20" aria-hidden="true"><rect width="20" height="20"/></svg>
+</section>
+
 <script>
   // raster images of exact sizes without shipping binaries
   const c = document.createElement('canvas');
@@ -204,6 +294,35 @@
     x.fillStyle = g; x.fillRect(0, 0, w, h);
     img.src = c.toDataURL('image/png');
   }
+  // dark photo with one bright strip under part of the text
+  for (const img of document.querySelectorAll('img[data-strip]')) {
+    const [w, h] = img.dataset.strip.split('x').map(Number);
+    c.width = w; c.height = h;
+    x.fillStyle = '#111'; x.fillRect(0, 0, w, h);
+    x.fillStyle = '#fff'; x.fillRect(100, 0, 22, h);
+    img.src = c.toDataURL('image/png');
+  }
+  // dark photo with a 2px bright line under the text
+  for (const img of document.querySelectorAll('img[data-line]')) {
+    const [w, h] = img.dataset.line.split('x').map(Number);
+    c.width = w; c.height = h;
+    x.fillStyle = '#111'; x.fillRect(0, 0, w, h);
+    x.fillStyle = '#fff'; x.fillRect(150, 0, 2, h);
+    img.src = c.toDataURL('image/png');
+  }
+  // fully transparent PNG
+  for (const img of document.querySelectorAll('img[data-clear]')) {
+    const [w, h] = img.dataset.clear.split('x').map(Number);
+    c.width = w; c.height = h;
+    x.clearRect(0, 0, w, h);
+    img.src = c.toDataURL('image/png');
+  }
+  // a 400px file offered as the 2x candidate: naturalWidth reports 200
+  c.width = 400; c.height = 400; x.fillStyle = '#3a7'; x.fillRect(0, 0, 400, 400);
+  document.getElementById('r24').srcset = c.toDataURL('image/png') + ' 2x';
+  // a layout bug that only a script causes, between two widths with no breakpoint
+  const island = () => { document.getElementById('r22').style.width = innerWidth >= 1100 && innerWidth <= 1150 ? '2000px' : ''; };
+  addEventListener('resize', island); island();
   // a theme bug on purpose: set on dark, never reset on light
   new MutationObserver(() => {
     if (document.documentElement.dataset.theme === 'dark') document.getElementById('t-js').style.color = 'rgb(255, 255, 255)';

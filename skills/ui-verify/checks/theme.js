@@ -33,6 +33,10 @@ async (opts = {}) => {
     await frames();
   };
   const ATTRS = ['data-theme', 'data-bs-theme', 'data-mode', 'data-color-mode', 'data-color-scheme'];
+  // validate every selector before touching the page
+  for (const s of selectors) {
+    try { document.querySelector(s); } catch { return { check: 'theme', ok: null, error: `invalid selector: ${s}` }; }
+  }
 
   // ---- detect
   let mech = null;
@@ -73,6 +77,7 @@ async (opts = {}) => {
       out[`${s} color`] = cs.color;
       out[`${s} background`] = cs.backgroundColor;
       out[`${s} border`] = cs.borderTopColor;
+      if (el instanceof SVGElement) { out[`${s} fill`] = cs.fill; out[`${s} stroke`] = cs.stroke; } // icons
     }
     return out;
   };
@@ -107,40 +112,61 @@ async (opts = {}) => {
     return { check: 'theme', ok: true, mechanism: describe, current: current(), probe: probe(), note: 'theme left switched — run with { cycle: true } or reload to restore' };
   }
 
-  // what the colours SHOULD be: a shallow clone with transitions off, inserted next to each
-  // element and removed again — switching transitions off on the original would itself
-  // "repair" (and then break) the page, and the check would report its own side effect
+  // what a transitioned colour SHOULD be: a shallow clone (with a text node, so :empty and
+  // friends still match) with transitions off, inserted next to the element and removed again.
+  // Turning transitions off on the original would itself "repair" (and then break) the page.
+  // Only properties that actually have a transition are compared — elsewhere the clone adds
+  // nothing but its own selector-context differences (:nth-child, sibling selectors).
+  const PROPS = { color: ['color'], background: ['background-color', 'background'], border: ['border-top-color', 'border-color', 'border-top', 'border'], fill: ['fill'], stroke: ['stroke'] };
+  const transitioned = (cs, key) => {
+    const names = cs.transitionProperty.split(',').map((t) => t.trim());
+    const durs = cs.transitionDuration.split(',').map((t) => parseFloat(t) || 0);
+    return names.some((n, i) => durs[i % durs.length] > 0 && (n === 'all' || PROPS[key].includes(n)));
+  };
   const noTransition = () => {
     const out = {};
     for (const s of selectors) {
       const el = document.querySelector(s);
-      if (!el) continue;
+      if (!el || el === de || el === body) continue;
+      const cs0 = getComputedStyle(el);
+      const keys = Object.keys(PROPS).filter((k) => (el instanceof SVGElement || !/fill|stroke/.test(k)) && transitioned(cs0, k));
+      if (!keys.length) continue;
       const c = el.cloneNode(false);
+      if (el.childNodes.length) c.appendChild(document.createTextNode('x'));
       c.style.setProperty('transition', 'none', 'important');
       el.after(c);
       const cs = getComputedStyle(c);
-      out[`${s} color`] = cs.color;
-      out[`${s} background`] = cs.backgroundColor;
-      out[`${s} border`] = cs.borderTopColor;
+      const read = { color: cs.color, background: cs.backgroundColor, border: cs.borderTopColor, fill: cs.fill, stroke: cs.stroke };
+      for (const k of keys) out[`${s} ${k}`] = read[k];
       c.remove();
     }
     return out;
   };
-  const first = probe();
-  const start = current();
-  const other = /dark/.test(start) ? 'light' : 'dark';
-  apply(other);
+  let first;
+  let start;
+  let other;
+  let mid;
+  let midTrue;
+  let back;
+  try {
+    first = probe();
+    start = current();
+    other = /dark/.test(start) ? 'light' : 'dark';
+    apply(other);
+    await settle();
+    mid = probe();
+    midTrue = noTransition();
+  } finally {
+    restore();
+  }
   await settle();
-  const mid = probe();
-  const midTrue = noTransition();
-  restore();
-  await settle();
-  const back = probe();
+  back = probe();
   const keys = Object.keys(first);
   const stuck = keys.filter((k) => back[k] !== first[k]).map((k) => ({ prop: k, before: first[k], other: mid[k], after: back[k] }));
-  const stale = keys.filter((k) => mid[k] !== midTrue[k]).map((k) => ({ prop: k, shown: mid[k], shouldBe: midTrue[k] }));
-  const changed = keys.filter((k) => midTrue[k] !== first[k]);
-  const unchanged = keys.filter((k) => midTrue[k] === first[k]);
+  const stale = Object.keys(midTrue).filter((k) => mid[k] !== midTrue[k]).map((k) => ({ prop: k, shown: mid[k], shouldBe: midTrue[k] }));
+  for (const k of Object.keys(midTrue)) mid[k] = midTrue[k];
+  const changed = keys.filter((k) => mid[k] !== first[k]); // mid now holds the true values for stale keys
+  const unchanged = keys.filter((k) => mid[k] === first[k]);
   const out = {
     check: 'theme',
     ok: stuck.length || stale.length ? false : changed.length ? true : null,
@@ -152,7 +178,7 @@ async (opts = {}) => {
     stale,
     probe: { before: first, other: mid },
   };
-  if (!changed.length) out.error = 'switching changed nothing — wrong mechanism, or the colours are hard-coded';
+  if (!changed.length) out.error = 'switching changed none of the probed colours — wrong mechanism, or these elements are meant to look the same in both themes';
   if (stale.length) {
     out.hint = 'a transition kept the old theme colour: Chromium (seen in 152) does not update a transitioned property whose value comes from light-dark() when color-scheme changes. '
       + 'Fix: disable transitions while switching — add a class on <html> with `* { transition: none !important }`, switch, remove the class after two requestAnimationFrame callbacks; or drop the transition on that property';

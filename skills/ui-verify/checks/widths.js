@@ -1,11 +1,13 @@
 /*
- * ui-verify · widths — check every width that matters, not just "mobile" and
+ * ui-verify · widths — sweep the widths that matter, not just "mobile" and
  * "desktop".
  *
  * Layout bugs live between breakpoints (e.g. only at 1024–1039px). This reads
  * the page's own breakpoints from its stylesheets (min-/max-width and range
- * syntax, px/em/rem) and tests each edge (bp−1, bp, bp+1) plus common device
- * widths.
+ * syntax, px/em/rem) and tests each edge (bp−1, bp, bp+1), common device
+ * widths, and a grid every `step` px (default 40) for bugs no breakpoint
+ * announces (scripts, container queries, fluid maths). A failure island
+ * narrower than `step` that touches none of these widths can still be missed.
  *
  *  - { listOnly: true } → just the list of widths. Use it when you drive the
  *    viewport with your browser tool (resize → overflow.js → next width).
@@ -18,14 +20,16 @@
  *  - { run: '<source of another check>' } → also runs that check inside the
  *    iframe at every width (e.g. the text of clipped.js).
  *
- * Options: { widths = null, extra = [], height = 900, listOnly = false, run = null, runOpts = {}, pause = 150 }
+ * Options: { widths = null, extra = [], step = 40, height = 900, listOnly = false, run = null, runOpts = {}, pause = 100 }
  * Every boundary between a passing and a failing width is then bisected, so a
  * range like "1024–1039" is exact to the pixel, not "somewhere between tests".
  *
- * Returns: { ok, breakpoints[], tested, failingRanges[], ranges[{ range, overflowPx, culprits, run }] }
+ * ok is null when a width could not be measured or the extra check could not decide.
+ *
+ * Returns: { ok, breakpoints[], tested, failingRanges[], ranges[{ range, overflowPx, culprits, run }], unmeasured[], undecided[] }
  */
 async (opts = {}) => {
-  const { widths: given = null, extra = [], height = 900, listOnly = false, run = null, runOpts = {}, pause = 150 } = opts;
+  const { widths: given = null, extra = [], step = 40, height = 900, listOnly = false, run = null, runOpts = {}, pause = 100 } = opts;
   const COMMON = [320, 360, 375, 390, 414, 768, 1024, 1280, 1440, 1920];
   const bps = new Set();
   const mins = new Set();
@@ -62,10 +66,11 @@ async (opts = {}) => {
   // max-width: 1039px + min-width: 1040px leaves 1039.01–1039.99 uncovered; at fractional zoom
   // (Windows 125 %, browser zoom) the viewport really lands there and neither rule applies
   const gaps = [...maxs].filter((x) => Number.isInteger(x) && mins.has(x + 1)).sort((a, b) => a - b).map((x) => `${x}px/${x + 1}px`);
-  const widths = given || [...new Set([...COMMON, ...extra, ...breakpoints.flatMap((b) => [b - 1, b, b + 1])])]
+  const grid = step > 0 ? Array.from({ length: Math.floor((1920 - 320) / step) + 1 }, (_, i) => 320 + i * step) : [];
+  const widths = given || [...new Set([...COMMON, ...grid, ...extra, ...breakpoints.flatMap((b) => [b - 1, b, b + 1])])]
     .filter((v) => v >= 280 && v <= 2560)
     .sort((a, b) => a - b);
-  const gapNote = gaps.length ? 'max-width N / min-width N+1 pairs leave a gap at fractional zoom — use max-width: N.98px or range syntax (width < N+1px)' : undefined;
+  const gapNote = gaps.length ? 'max-width N / min-width N+1 pairs leave a gap at fractional zoom — use range syntax (width < N+1px / width >= N+1px), which leaves none; max-width: N.98px only narrows it to 0.02px' : undefined;
   if (listOnly) return { check: 'widths', ok: true, breakpoints, gaps, gapNote, widths, unreadableSheets: unreadable };
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -103,12 +108,15 @@ async (opts = {}) => {
         }
         return false;
       };
+      // only the side that scrolls counts: right in LTR, left in RTL (same rule as overflow.js)
+      const rtl = gcs(de).direction === 'rtl';
+      const dr = de.getBoundingClientRect();
       const out = [];
       for (const el of d.body.querySelectorAll('*')) {
         const r = el.getBoundingClientRect();
         if (!r.width || !r.height) continue;
-        if (r.right + w.scrollX <= vw + 1 && r.left + w.scrollX >= -1) continue;
-        if (!ignored(el)) out.push({ el, right: r.right + w.scrollX, width: r.width });
+        const past = rtl ? r.left - dr.left < -1 : r.right - dr.left > vw + 1;
+        if (past && !ignored(el)) out.push({ el, right: r.right - dr.left, width: r.width });
       }
       const set = new Set(out.map((o) => o.el));
       const outer = out.filter((o) => { for (let p = o.el.parentElement; p; p = p.parentElement) if (set.has(p)) return false; return true; });
@@ -122,8 +130,15 @@ async (opts = {}) => {
       void f.offsetWidth; // force the parent layout so the frame gets its new size
       // never measure before the frame confirms the width (throttled/hidden tabs apply it late)
       for (let t = 0; t < 40 && w.innerWidth !== width; t++) await wait(25);
+      // a hidden tab renders no frames, so the page's own resize handlers would not run before we
+      // measure; fire the event the browser would have fired (only in this iframe copy)
+      try { w.dispatchEvent(new w.Event('resize')); } catch { /* ignore */ }
       await wait(pause);
-      if (w.innerWidth !== width) return { width, overflowPx: 0, culprits: [], error: `frame stuck at ${w.innerWidth}px` };
+      if (w.innerWidth !== width) {
+        const row = { width, overflowPx: 0, culprits: [], error: `frame stuck at ${w.innerWidth}px` };
+        results.push(row);
+        return row;
+      }
       const row = { width, ...overflowAt() };
       if (fn) {
         try { row.run = await fn(runOpts); } catch (e) { row.run = { error: String(e) }; }
@@ -154,6 +169,11 @@ async (opts = {}) => {
   const byWidth = new Map(results.map((r) => [r.width, r]));
   results.length = 0;
   results.push(...[...byWidth.values()].sort((a, b) => a.width - b.width));
+  const unmeasured = results.filter((r) => r.error).map((r) => r.width);
+  const undecided = results.filter((r) => !r.error && r.run && (r.run.ok === null || r.run.error)).map((r) => r.width);
+  const measured = results.filter((r) => !r.error);
+  results.length = 0;
+  results.push(...measured);
   const ranges = [];
   let open = null;
   for (let i = 0; i < results.length; i++) {
@@ -169,9 +189,11 @@ async (opts = {}) => {
   const fmt = (g) => (g.from === g.to ? `${g.from}` : `${g.exactFrom ? '' : '≤'}${g.from}–${g.exactTo ? '' : '≥'}${g.to}`);
   return {
     check: 'widths',
-    ok: ranges.length === 0,
+    ok: ranges.length ? false : unmeasured.length || undecided.length ? null : true,
     breakpoints,
     tested: results.length,
+    unmeasured: unmeasured.slice(0, 20),
+    undecided: undecided.slice(0, 20),
     failingRanges: ranges.map(fmt),
     ranges: ranges.slice(0, 10).map((g) => ({ range: fmt(g), overflowPx: g.sample.overflowPx, culprits: g.sample.culprits, run: g.sample.run })),
     dpr: devicePixelRatio,

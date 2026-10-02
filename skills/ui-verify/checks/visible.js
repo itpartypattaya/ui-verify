@@ -41,41 +41,82 @@
     for (let n = el; n && n.nodeType === 1; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity);
     return o;
   };
+  // mean alpha of an image's pixels (same-origin/CORS); null when unreadable
+  const alphaCache = new Map();
+  const imgAlpha = (img) => {
+    if (alphaCache.has(img)) return alphaCache.get(img);
+    let a = null;
+    try {
+      const c = document.createElement('canvas');
+      c.width = 8;
+      c.height = 8;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      g.drawImage(img, 0, 0, 8, 8);
+      const d = g.getImageData(0, 0, 8, 8).data;
+      let s = 0;
+      for (let i = 3; i < d.length; i += 4) s += d[i];
+      a = s / (64 * 255);
+    } catch { /* cross-origin or not decoded */ }
+    alphaCache.set(img, a);
+    return a;
+  };
+  // true = hides what is below, false = see-through, null = cannot tell (e.g. cross-origin PNG)
   const opaque = (n) => {
-    if (/^(IMG|VIDEO|CANVAS|IFRAME|OBJECT|EMBED)$/.test(n.tagName)) return true;
-    const cs = getComputedStyle(n);
     if (opacityOf(n) < 0.5) return false;
+    if (/^(VIDEO|CANVAS|IFRAME|OBJECT|EMBED)$/.test(n.tagName)) return true;
+    if (n.tagName === 'IMG') {
+      if (/\.jpe?g(\?|#|$)/i.test(n.currentSrc || '')) return true;
+      const a = imgAlpha(n);
+      return a === null ? null : a >= 0.5;
+    }
+    const cs = getComputedStyle(n);
     if (alpha(cs.backgroundColor) >= 0.9 || /url\(/.test(cs.backgroundImage)) return true;
     return ['::before', '::after'].some((p) => {
       const ps = getComputedStyle(n, p);
       return ps.content !== 'none' && (alpha(ps.backgroundColor) >= 0.9 || /url\(/.test(ps.backgroundImage));
     });
   };
-  // visible part of el after ancestors' overflow clipping (respects absolute/fixed escaping static clippers)
+  // ancestors that become the containing block of position: fixed descendants
+  const fixedCB = (pc) => pc.transform !== 'none' || pc.filter !== 'none' || pc.perspective !== 'none'
+    || (pc.backdropFilter && pc.backdropFilter !== 'none') || (pc.containerType && pc.containerType !== 'normal')
+    || /paint|layout|strict|content/.test(pc.contain) || /transform|filter|perspective|backdrop-filter|contain/.test(pc.willChange);
+  // visible part of el after ancestors' overflow clipping, per axis. An overflow box clips only
+  // descendants whose containing-block chain passes through it: absolute boxes escape static
+  // clippers up to their positioned ancestor, fixed boxes escape everything up to a
+  // transformed/filtered/contained ancestor (or the viewport).
   const clipRect = (el) => {
     const r = el.getBoundingClientRect();
     let box = { l: r.left, t: r.top, r: r.right, b: r.bottom };
     let by = null;
-    let needPositioned = /absolute/.test(getComputedStyle(el).position);
-    if (getComputedStyle(el).position === 'fixed') return { box, by };
+    const modeOf = (pos) => (pos === 'fixed' ? 'fixed' : pos === 'absolute' ? 'abs' : 'flow');
+    let mode = modeOf(getComputedStyle(el).position);
     for (let p = el.parentElement; p && p !== document.documentElement; p = p.parentElement) {
       const pc = getComputedStyle(p);
-      const positioned = pc.position !== 'static';
-      if (!(needPositioned && !positioned) && (pc.overflowX !== 'visible' || pc.overflowY !== 'visible')) {
+      const applies = mode === 'flow' || (mode === 'abs' && (pc.position !== 'static' || fixedCB(pc))) || (mode === 'fixed' && fixedCB(pc));
+      if (!applies) continue;
+      if (pc.overflowX !== 'visible' || pc.overflowY !== 'visible') {
         const pr = p.getBoundingClientRect();
-        const nb = { l: Math.max(box.l, pr.left), t: Math.max(box.t, pr.top), r: Math.min(box.r, pr.right), b: Math.min(box.b, pr.bottom) };
-        if ((nb.r - nb.l) * (nb.b - nb.t) < (box.r - box.l) * (box.b - box.t) - 1) by = by || name(p);
+        const nb = { ...box };
+        if (pc.overflowX !== 'visible') { nb.l = Math.max(box.l, pr.left); nb.r = Math.min(box.r, pr.right); }
+        if (pc.overflowY !== 'visible') { nb.t = Math.max(box.t, pr.top); nb.b = Math.min(box.b, pr.bottom); }
+        const area = (q) => Math.max(0, q.r - q.l) * Math.max(0, q.b - q.t);
+        if (area(nb) < area(box) - 1) by = by || name(p);
         box = nb;
       }
-      if (positioned) needPositioned = pc.position === 'absolute';
-      if (pc.position === 'fixed') break;
+      mode = modeOf(pc.position);
     }
     return { box, by };
   };
 
   const sx = scrollX;
   const sy = scrollY;
-  let scrolled = false;
+  // window and every inner scroller scrollIntoView may move, restored at the end
+  const saved = new Map();
+  const remember = (el) => {
+    for (let n = el.parentElement; n; n = n.parentElement) {
+      if (!saved.has(n) && (n.scrollHeight > n.clientHeight || n.scrollWidth > n.clientWidth)) saved.set(n, [n.scrollLeft, n.scrollTop]);
+    }
+  };
   const force = document.createElement('style');
   force.textContent = '*, *::before, *::after { pointer-events: auto !important }';
   const results = [];
@@ -91,12 +132,13 @@
       if (cs.visibility !== 'visible') reasons.push(`visibility: ${cs.visibility}`);
       const op = opacityOf(el);
       if (op < 0.05) reasons.push(`opacity ${+op.toFixed(2)} (own × ancestors)`);
-      if (cs.clipPath !== 'none') reasons.push(`clip-path: ${cs.clipPath.slice(0, 40)} — check the shape`);
+      const notes = [];
+      if (cs.clipPath !== 'none') notes.push(`clip-path: ${cs.clipPath.slice(0, 40)} — the shape is not modelled; check that the hit points fall inside it`);
       let r = el.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) reasons.push(`zero size ${Math.round(r.width)}×${Math.round(r.height)}`);
       if (scroll && (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth)) {
+        remember(el);
         el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-        scrolled = true;
       }
       const { box, by } = clipRect(el);
       const area = Math.max(0, r.width) * Math.max(0, r.height);
@@ -117,13 +159,16 @@
       const covers = new Map();
       let coveredPts = 0;
       let opaquePts = 0;
+      let unsurePts = 0;
       for (const [x, y] of pts) {
         const stack = document.elementsFromPoint(x, y);
         const i = stack.indexOf(el);
         const above = (i === -1 ? stack.slice(0, 1) : stack.slice(0, i)).filter((n) => !el.contains(n) && !n.contains(el));
         if (!above.length) continue;
         coveredPts++;
-        if (above.some(opaque)) opaquePts++;
+        const o = above.map(opaque);
+        if (o.includes(true)) opaquePts++;
+        else if (o.includes(null)) unsurePts++;
         for (const n of above) {
           const k = name(n);
           if (!covers.has(k)) {
@@ -138,23 +183,33 @@
       let verdict = reasons.length ? 'hidden' : 'visible';
       if (verdict === 'visible' && opaquePts >= 3) verdict = 'covered';
       else if (verdict === 'visible' && opaquePts > 0) verdict = 'partly-covered';
+      else if (verdict === 'visible' && unsurePts > 0) {
+        verdict = 'possibly-covered';
+        notes.push('an image with unreadable pixels (cross-origin) lies on top — it may be transparent there; zoom a screenshot');
+      }
       const out = {
         ...res, verdict, reasons,
-        points: `${coveredPts}/5 points have something on top (${opaquePts} opaque)`,
+        points: `${coveredPts}/5 points have something on top (${opaquePts} opaque${unsurePts ? `, ${unsurePts} unknown` : ''})`,
         coveredBy: [...covers.values()].slice(0, 4),
         clickTarget: click ? name(click) : null,
         clickable,
         position: cs.position, zIndex: cs.zIndex,
       };
-      if (verdict !== 'visible' && verdict !== 'hidden' && cs.position === 'static' && [...covers.values()].some((c) => c.position !== 'static')) {
-        out.hint = 'non-positioned (static) boxes paint below positioned siblings, and z-index does nothing on static — give it position: relative (and a z-index if needed)';
+      if (notes.length) out.notes = notes;
+      const flexItem = el.parentElement && /flex|grid/.test(getComputedStyle(el.parentElement).display);
+      if (/covered/.test(verdict) && cs.position === 'static' && !flexItem && [...covers.values()].some((c) => c.position !== 'static')) {
+        out.hint = 'a static box (not a flex/grid item) paints below positioned siblings, and z-index does nothing on it — give it position: relative (and a z-index if needed)';
       }
       if (clickable === false && verdict === 'visible') out.hint = `visible, but clicks at its centre go to ${out.clickTarget} — a transparent layer on top (check pointer-events)`;
       results.push(out);
     }
   } finally {
     force.remove();
-    if (scrolled) scrollTo({ left: sx, top: sy, behavior: 'instant' });
+    for (const [n, [l, t]] of saved) { n.scrollLeft = l; n.scrollTop = t; }
+    scrollTo({ left: sx, top: sy, behavior: 'instant' });
   }
-  return { check: 'visible', ok: results.every((x) => x.verdict === 'visible' && x.clickable !== false), results };
+  const ok = results.some((x) => x.verdict !== 'visible' && x.verdict !== 'possibly-covered') || results.some((x) => x.clickable === false)
+    ? false
+    : results.some((x) => x.verdict === 'possibly-covered') ? null : true;
+  return { check: 'visible', ok, results };
 }

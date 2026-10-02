@@ -40,15 +40,17 @@
     }
     return out.sort((a, b) => b.count - a.count);
   };
+  // groups of equal size, within the tolerance on both axes
   const sizes = (els) => {
-    const m = new Map();
+    const groups = [];
     for (const el of els) {
       const b = box(el);
-      const k = `${Math.round(b.w)}×${Math.round(b.h)}`;
-      if (!m.has(k)) m.set(k, []);
-      m.get(k).push(el);
+      const g = groups.find((x) => same(x.w, b.w) && same(x.h, b.h));
+      if (g) g.list.push(el); else groups.push({ w: b.w, h: b.h, list: [el] });
     }
-    return [...m].map(([size, list]) => ({ size, count: list.length, examples: list.slice(0, 3).map(name) })).sort((a, b) => b.count - a.count);
+    return groups
+      .map((g) => ({ size: `${Math.round(g.w)}×${Math.round(g.h)}`, count: g.list.length, examples: g.list.slice(0, 3).map(name) }))
+      .sort((a, b) => b.count - a.count);
   };
   const hint = (el) => {
     const cs = getComputedStyle(el);
@@ -61,8 +63,16 @@
   };
 
   if (cells || inner) {
-    const c = cells ? sizes([...document.querySelectorAll(cells)]) : [];
-    const i = inner ? sizes([...document.querySelectorAll(inner)]) : [];
+    const pick = (s) => {
+      try { return [...document.querySelectorAll(s)]; } catch { return null; }
+    };
+    const ce = cells ? pick(cells) : [];
+    const ie = inner ? pick(inner) : [];
+    if (ce === null || ie === null) return { check: 'grid', ok: null, error: 'invalid selector' };
+    const empty = [cells && !ce.length && cells, inner && !ie.length && inner].filter(Boolean);
+    if (empty.length) return { check: 'grid', ok: null, error: `nothing matches ${empty.join(', ')}` };
+    const c = sizes(ce);
+    const i = sizes(ie);
     return { check: 'grid', ok: c.length <= 1 && i.length <= 1, cells: c, inner: i };
   }
 

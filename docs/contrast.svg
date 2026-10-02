@@ -93,7 +93,7 @@
   <rect x="506" y="338" width="38" height="38" rx="4" fill="#323232" stroke="#64748b"/>
   <text x="514" y="363" fill="#dddddd" font-size="13" font-weight="600">Aa</text>
   <text x="720" y="352" fill="#34d399" font-size="20" font-weight="700" text-anchor="middle">9.40 : 1  ✓</text>
-  <text x="720" y="375" class="s" text-anchor="middle">gradients: worst stop · any CSS colour (oklch, lab…)</text>
+  <text x="720" y="375" class="s" text-anchor="middle">gradients: worst colour, between stops too · any CSS colour</text>
 
   <!-- ============ bottom: what is under the text ============ -->
   <text x="30" y="452" fill="#e2e8f0" font-size="12" font-weight="600">what the base layer turns out to be</text>
@@ -111,8 +111,8 @@
   <rect x="356" y="482" width="40" height="40" rx="4" fill="url(#photo)" stroke="#64748b"/>
   <text x="410" y="498" class="t">&lt;img&gt; / &lt;video&gt;</text>
   <text x="410" y="514" class="s">same-origin or CORS</text>
-  <text x="356" y="548" class="n">reads 192 pixels under the text</text>
-  <text x="356" y="566" class="s">ratio = 10th percentile, range = min…max</text>
+  <text x="356" y="548" class="n">reads the pixels under every line</text>
+  <text x="356" y="566" class="s">pass only if every pixel passes</text>
 
   <rect x="650" y="466" width="280" height="120" rx="8" fill="#0f172a"/>
   <rect x="650" y="466" width="280" height="120" rx="8" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
@@ -125,8 +125,8 @@
   </g>
   <text x="720" y="498" class="t">pixels unknown</text>
   <text x="720" y="514" class="s">CSS bg image, cross-origin</text>
-  <text x="666" y="548" class="n">tests every grey 0…255 under</text>
-  <text x="666" y="566" class="s">the overlay: worst ok → pass, else null</text>
+  <text x="666" y="548" class="n">exact bound over any colour</text>
+  <text x="666" y="566" class="s">underneath: worst ok → pass, else null</text>
 
-  <text x="30" y="616" class="s">thresholds WCAG 2: 4.5 : 1 text · 3 : 1 large text (≥ 24px, or ≥ 18.66px bold) · disabled controls exempt</text>
+  <text x="30" y="616" class="s">thresholds WCAG 2: 4.5 : 1 text · 3 : 1 large text (≥ 24px, or ≥ 18.67px bold) · disabled controls exempt</text>
 </svg>

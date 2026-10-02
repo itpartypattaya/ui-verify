@@ -59,7 +59,7 @@
   const smallText = [...sizes.values()].sort((a, b) => parseFloat(a.fontSize) - parseFloat(b.fontSize));
 
   // ---- inputs that trigger iOS zoom
-  const smallInputs = [...document.querySelectorAll('input, select, textarea')]
+  const smallInputs = [...document.querySelectorAll('input, select, textarea, [contenteditable]:not([contenteditable="false"])')]
     .filter((el) => !/^(hidden|checkbox|radio|range|color|file|submit|button|reset|image)$/i.test(el.type || '') && visible(el))
     .filter((el) => parseFloat(getComputedStyle(el).fontSize) < minInput)
     .map((el) => ({ el: name(el), type: el.type || el.tagName.toLowerCase(), fontSize: getComputedStyle(el).fontSize }));

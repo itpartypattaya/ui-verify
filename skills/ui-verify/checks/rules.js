@@ -4,8 +4,10 @@
  * grep over the build answers "is the string in a file". This answers "which
  * rules match this element right now": every matching rule from every readable
  * stylesheet, with its @media/@supports/@container/@layer context, whether that
- * context is active at the current width, !important and approximate
- * specificity — sorted with the likely winner first, next to the computed value.
+ * context is active at the current width, !important, cascade-layer order and
+ * specificity — sorted by the CSS cascade with the likely winner first, next to
+ * the computed value. A candidate in a context that cannot be evaluated here
+ * (@container, implicit @scope) is never named the winner.
  *
  * Options: { selector (required), props = [] (empty → every property the
  *            matching rules declare, up to 40), pseudo = null ('::before' …) }
@@ -36,16 +38,50 @@
     if (cur.trim()) out.push(cur.trim());
     return out;
   };
-  // approximate specificity [ids, classes/attrs/pseudo-classes, types]
-  const spec = (s) => {
-    s = s.replace(/:where\((?:[^()]|\([^()]*\))*\)/g, '').replace(/:(is|not|has)\(/g, '(');
-    const pe = (s.match(/::[\w-]+|:(before|after|first-line|first-letter)\b/g) || []).length;
-    s = s.replace(/::[\w-]+|:(before|after|first-line|first-letter)\b/g, '');
-    const a = (s.match(/#[\w-]+/g) || []).length;
-    const b = (s.match(/\.[\w-]+|\[[^\]]*\]|:[\w-]+/g) || []).length;
-    const c = (s.replace(/"[^"]*"|'[^']*'|\[[^\]]*\]/g, '').match(/(^|[\s>+~(])[a-z][\w-]*/gi) || []).length + pe;
+  // specificity [ids, classes/attrs/pseudo-classes, types] of one complex selector;
+  // :is()/:not()/:has() take their most specific argument, :where() counts zero
+  const cmp3 = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  const maxSpec = (list) => list.map(spec).sort((x, y) => cmp3(y, x))[0] || [0, 0, 0];
+  function spec(s) {
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    let i = 0;
+    const word = (j) => { while (j < s.length && /[\w-]/.test(s[j])) j++; return j; };
+    while (i < s.length) {
+      const ch = s[i];
+      if (ch === '#') { a++; i = word(i + 1); } else if (ch === '.') { b++; i = word(i + 1); } else if (ch === '[') {
+        b++;
+        const j = s.indexOf(']', i);
+        i = j < 0 ? s.length : j + 1;
+      } else if (ch === ':') {
+        const pe = s[i + 1] === ':';
+        let j = word(i + (pe ? 2 : 1));
+        const nm = s.slice(i + (pe ? 2 : 1), j).toLowerCase();
+        let args = null;
+        if (s[j] === '(') {
+          let d = 0;
+          let k = j;
+          for (; k < s.length; k++) {
+            if (s[k] === '(') d++;
+            else if (s[k] === ')' && !--d) break;
+          }
+          args = s.slice(j + 1, k);
+          j = k + 1;
+        }
+        if (pe || /^(before|after|first-line|first-letter)$/.test(nm)) c++;
+        else if (nm === 'where') { /* zero */ } else if (/^(is|not|has|matches|-webkit-any)$/.test(nm) && args !== null) {
+          const m = maxSpec(splitList(args));
+          a += m[0]; b += m[1]; c += m[2];
+        } else if (/^nth-(last-)?child$/.test(nm) && args && / of /i.test(args)) {
+          const m = maxSpec(splitList(args.split(/ of /i)[1]));
+          a += m[0]; b += m[1] + 1; c += m[2];
+        } else b++;
+        i = j;
+      } else if (/[a-zA-Z_]/.test(ch)) { c++; i = word(i); } else i++;
+    }
     return [a, b, c];
-  };
+  }
   const matchesTarget = (sel) => {
     const pm = sel.match(PSEUDO_EL);
     const base = pm ? sel.slice(0, pm.index).trim() || '*' : sel;
@@ -58,8 +94,31 @@
   const found = [];
   const unreadable = [];
   let order = 0;
+  let anon = 0;
+  // cascade layers in order of first appearance, as a tree: "a.b" = sublayer b of a
+  const kids = new Map([['', []]]);
+  const register = (full) => {
+    let parent = '';
+    for (const part of full.split('.')) {
+      const me = parent ? `${parent}.${part}` : part;
+      if (!kids.get(parent).includes(part)) kids.get(parent).push(part);
+      if (!kids.has(me)) kids.set(me, []);
+      parent = me;
+    }
+  };
+  // [index at each depth…, Infinity]: Infinity = "directly in this layer", which beats its sublayers
+  const layerKey = (full) => {
+    if (!full) return [Infinity];
+    const key = [];
+    let parent = '';
+    for (const part of full.split('.')) {
+      key.push(kids.get(parent).indexOf(part));
+      parent = parent ? `${parent}.${part}` : part;
+    }
+    return key.concat(Infinity);
+  };
   const short = (href) => (href ? href.replace(location.origin, '').split('?')[0].slice(-70) : 'inline <style>');
-  const walk = (rules, ctx, sheet, parentSel) => {
+  const walk = (rules, ctx, sheet, parentSel, lp) => {
     for (const r of rules) {
       order++;
       if (r instanceof CSSStyleRule) {
@@ -67,56 +126,80 @@
         if (parentSel) {
           full = splitList(r.selectorText).map((s) => (s.includes('&') ? s.replace(/&/g, `:is(${parentSel})`) : `:is(${parentSel}) ${s}`)).join(', ');
         }
-        const hits = splitList(full).filter(matchesTarget);
+        const scope = ctx.filter((c) => c.scope).pop();
+        const testable = scope ? full.replace(/:scope\b/g, `:is(${scope.scope})`) : full;
+        const hits = splitList(testable).filter(matchesTarget);
         if (hits.length) {
           const decl = [];
           for (let i = 0; i < r.style.length; i++) decl.push(r.style[i]);
+          const best = hits.map((h) => ({ h, s: spec(h) })).sort((x, y) => cmp3(y.s, x.s))[0];
           found.push({
-            selector: hits.sort((x, y) => String(spec(y)) > String(spec(x)) ? 1 : -1)[0],
-            specificity: spec(hits[0]),
+            selector: best.h,
+            specificity: best.s,
             sheet: short(sheet.href),
             at: ctx.map((c) => `${c.type} ${c.text}`.trim()),
-            layer: ctx.filter((c) => c.type === '@layer').map((c) => c.text).join('.') || null,
-            active: ctx.every((c) => c.active !== false),
-            unknownContext: ctx.some((c) => c.active === null),
+            layer: lp || null,
+            active: ctx.some((c) => c.active === false) ? false : ctx.some((c) => c.active === null) ? null : true,
             style: r.style,
             decl,
             order,
           });
         }
-        if (r.cssRules && r.cssRules.length) walk(r.cssRules, ctx, sheet, full);
+        if (r.cssRules && r.cssRules.length) walk(r.cssRules, ctx, sheet, full, lp);
       } else if (r instanceof CSSMediaRule) {
-        walk(r.cssRules, [...ctx, { type: '@media', text: r.media.mediaText, active: matchMedia(r.media.mediaText).matches }], sheet, parentSel);
+        walk(r.cssRules, [...ctx, { type: '@media', text: r.media.mediaText, active: matchMedia(r.media.mediaText).matches }], sheet, parentSel, lp);
       } else if (r instanceof CSSSupportsRule) {
         let ok = null;
         try { ok = CSS.supports(r.conditionText); } catch { /* unknown */ }
-        walk(r.cssRules, [...ctx, { type: '@supports', text: r.conditionText, active: ok }], sheet, parentSel);
+        walk(r.cssRules, [...ctx, { type: '@supports', text: r.conditionText, active: ok }], sheet, parentSel, lp);
       } else if (window.CSSContainerRule && r instanceof CSSContainerRule) {
-        walk(r.cssRules, [...ctx, { type: '@container', text: r.conditionText, active: null }], sheet, parentSel);
+        walk(r.cssRules, [...ctx, { type: '@container', text: r.conditionText, active: null }], sheet, parentSel, lp);
+      } else if (window.CSSScopeRule && r instanceof CSSScopeRule) {
+        // active when the element sits inside a scope root and not below a scope limit
+        let active = null;
+        if (r.start) {
+          let root = null;
+          try { root = el.closest(r.start); } catch { /* unparsable */ }
+          let limit = null;
+          try { limit = r.end ? el.closest(r.end) : null; } catch { /* unparsable */ }
+          active = !!root && !(limit && limit !== root && root.contains(limit));
+        }
+        walk(r.cssRules, [...ctx, { type: '@scope', text: `(${r.start || ':scope'})${r.end ? ` to (${r.end})` : ''}`, active, scope: r.start || null }], sheet, parentSel, lp);
       } else if (window.CSSLayerBlockRule && r instanceof CSSLayerBlockRule) {
-        walk(r.cssRules, [...ctx, { type: '@layer', text: r.name || '(anonymous)', active: true }], sheet, parentSel);
+        const full = (lp ? `${lp}.` : '') + (r.name || `(anonymous ${++anon})`);
+        register(full);
+        walk(r.cssRules, [...ctx, { type: '@layer', text: full, active: true }], sheet, parentSel, full);
+      } else if (window.CSSLayerStatementRule && r instanceof CSSLayerStatementRule) {
+        for (const n of r.nameList) register((lp ? `${lp}.` : '') + n);
       } else if (r instanceof CSSImportRule && r.styleSheet) {
         const media = r.media && r.media.mediaText;
-        readSheet(r.styleSheet, [...ctx, { type: '@import', text: media || '', active: media ? matchMedia(media).matches : true }]);
+        let layer = lp;
+        if (r.layerName !== null && r.layerName !== undefined) {
+          layer = (lp ? `${lp}.` : '') + (r.layerName || `(anonymous ${++anon})`);
+          register(layer);
+        }
+        readSheet(r.styleSheet, [...ctx, { type: '@import', text: media || '', active: media ? matchMedia(media).matches : true }], layer);
       } else if (r.cssRules) {
-        walk(r.cssRules, ctx, sheet, parentSel);
+        walk(r.cssRules, ctx, sheet, parentSel, lp);
       }
     }
   };
-  const readSheet = (sheet, ctx = []) => {
+  const readSheet = (sheet, ctx = [], lp = '') => {
     let rules;
     try { rules = sheet.cssRules; } catch { unreadable.push(sheet.href || '(unknown)'); return; }
     const media = sheet.media && sheet.media.mediaText;
     const c = media ? [...ctx, { type: '@media', text: media, active: matchMedia(media).matches }] : ctx;
     if (sheet.disabled) c.push({ type: 'disabled', text: 'stylesheet', active: false });
-    walk(rules, c, sheet, null);
+    walk(rules, c, sheet, null, lp);
   };
   [...document.styleSheets, ...(document.adoptedStyleSheets || [])].forEach((s) => readSheet(s));
 
-  const wanted = props.length ? props : [...new Set(found.flatMap((f) => f.decl))].slice(0, 40);
+  const inlineProps = pseudo ? [] : [...el.style];
+  const wanted = props.length ? props : [...new Set([...inlineProps, ...found.flatMap((f) => f.decl)])].slice(0, 40);
   const cs = getComputedStyle(el, pseudo || null);
   const computed = {};
   const candidates = {};
+  const notesFor = [];
   for (const p of wanted) {
     computed[p] = cs.getPropertyValue(p);
     const list = found
@@ -126,28 +209,45 @@
         important: f.style.getPropertyPriority(p) === 'important',
         selector: f.selector, specificity: f.specificity.join(','), sheet: f.sheet,
         at: f.at.length ? f.at.join(' › ') : null, layer: f.layer,
-        active: f.unknownContext && f.active ? 'unknown (@container)' : f.active,
-        order: f.order,
+        active: f.active === null ? 'unknown (@container/@scope)' : f.active,
+        _spec: f.specificity, _layer: layerKey(f.layer), order: f.order,
       }));
     if (!pseudo && el.style.getPropertyValue(p)) {
-      list.push({ value: el.style.getPropertyValue(p), important: el.style.getPropertyPriority(p) === 'important', selector: 'style="" (inline)', specificity: 'inline', sheet: 'inline', at: null, layer: null, active: true, order: Infinity });
+      list.push({ value: el.style.getPropertyValue(p), important: el.style.getPropertyPriority(p) === 'important', selector: 'style="" (inline)', specificity: 'inline', sheet: 'inline', at: null, layer: null, active: true, inline: true, _spec: [0, 0, 0], _layer: [Infinity], order: Infinity });
     }
-    // cascade order (approx.): active → !important → inline → unlayered beats layered (normal) → specificity → source order
-    const rank = (c) => [c.active === true ? 1 : 0, c.important ? 1 : 0, c.specificity === 'inline' ? 1 : 0, c.layer ? (c.important ? 1 : 0) : (c.important ? 0 : 1), ...(c.specificity === 'inline' ? [0, 0, 0] : c.specificity.split(',').map(Number)), c.order];
-    list.sort((a, b) => {
-      const ra = rank(a);
-      const rb = rank(b);
-      for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return rb[i] - ra[i];
+    // cascade (CSS Cascade 5): importance → inline → layers (normal: later wins; !important: earlier wins)
+    // → specificity → source order. Unknown contexts are ranked as if active, but never named winner.
+    const layerCmp = (x, y) => {
+      for (let i = 0; i < Math.max(x.length, y.length); i++) {
+        const a = x[i] ?? -1;
+        const b = y[i] ?? -1;
+        if (a !== b) return a > b ? 1 : -1;
+      }
       return 0;
-    });
+    };
+    const stronger = (x, y) => {
+      const ax = x.active === false ? 0 : 1;
+      const ay = y.active === false ? 0 : 1;
+      if (ax !== ay) return ay - ax;
+      if (x.important !== y.important) return x.important ? -1 : 1;
+      if (!!x.inline !== !!y.inline) return x.inline ? -1 : 1;
+      const l = layerCmp(x._layer, y._layer);
+      if (l) return x.important ? l : -l;
+      const s = cmp3(x._spec, y._spec);
+      if (s) return -s;
+      return y.order - x.order;
+    };
+    list.sort(stronger);
     if (list[0] && list[0].active === true) list[0].likelyWinner = true;
-    candidates[p] = list.map(({ order: _o, ...c }) => c);
+    else if (list[0] && typeof list[0].active === 'string') notesFor.push(`${p}: the strongest candidate sits in an unresolved @container/@scope — no winner named`);
+    candidates[p] = list.map(({ order: _o, _spec, _layer, inline: _i, ...c }) => c);
   }
-  const inactive = found.filter((f) => !f.active).map((f) => ({ selector: f.selector, at: f.at.join(' › '), sheet: f.sheet }));
-  const notes = [];
+  const inactive = found.filter((f) => f.active === false).map((f) => ({ selector: f.selector, at: f.at.join(' › '), sheet: f.sheet }));
+  const notes = [...notesFor];
+  if (el.getAnimations && el.getAnimations().length) notes.push('the element has running animations/transitions — they override the declarations listed here while they run');
   if (unreadable.length) notes.push('some stylesheets are cross-origin without CORS — their rules are invisible here but the browser still applies them');
   if (props.length && wanted.some((p) => !candidates[p].length)) notes.push('no rule declares some of the requested properties — the value is inherited or the initial value; check the parent');
-  notes.push('state selectors (:hover, :focus, :checked) only match while that state is on; specificity is approximate');
+  notes.push('state selectors (:hover, :focus, :checked) only match while that state is on; @scope proximity and shadow-DOM context are not ranked');
   if (pseudo && cs.content === 'none' && /before|after/.test(pseudo)) notes.push(`${pseudo} has content: none — the pseudo-element is not generated at all`);
   return {
     check: 'rules',
