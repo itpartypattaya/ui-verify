@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>ui-verify fixtures</title>
+<style>
+  @font-face { font-family: 'Subset'; src: local('Arial'), local('Liberation Sans'), local('DejaVu Sans'); unicode-range: U+0000-00FF; }
+  :root { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: #fff; color: #222; }
+  section { padding: 24px; border-bottom: 1px solid #ddd; }
+  h2 { margin: 0 0 12px; font-size: 20px; }
+
+  /* ---------- contrast ---------- */
+  #c-oklch-fail { color: oklch(0.85 0.03 250); background: color-mix(in srgb, white 90%, #eee); padding: 8px; }
+  #c-oklch-pass { color: oklch(0.3 0.05 250); background: color-mix(in srgb, red 10%, white); padding: 8px; }
+  .c-dark { background: #111; padding: 16px; }
+  #c-translucent { background: rgba(255, 255, 255, 0.14); color: #ddd; padding: 8px; }
+  #c-gradient { background: linear-gradient(oklch(0.95 0.05 90), oklch(0.85 0.1 90)); color: #222; padding: 8px; }
+  .c-hero { position: relative; height: 90px; background: #fff; margin-top: 12px; }
+  .c-hero .c-shade { position: absolute; inset: 0; background: rgb(20, 20, 20); }
+  #c-sibling { position: relative; z-index: 1; color: #eee; margin: 0; padding: 16px; }
+  .c-photo { position: relative; height: 90px; margin-top: 12px; }
+  .c-photo img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .c-photo .c-veil { position: absolute; inset: 0; }
+  .c-photo p { position: relative; margin: 0; padding: 16px; color: #fff; }
+  #c-photo-strong .c-veil { background: rgba(0, 0, 0, 0.7); }
+  #c-photo-weak .c-veil { background: rgba(0, 0, 0, 0.2); }
+  #c-bgphoto { height: 70px; margin-top: 12px; padding: 16px; color: #fff; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='10'%3E%3Crect width='20' height='10' fill='%23eee'/%3E%3Crect x='20' width='20' height='10' fill='%23234'/%3E%3C/svg%3E") center / cover; }
+  #c-bgphoto p { margin: 0; }
+  #c-disabled { color: #ccc; background: #fff; }
+  #c-reveal { opacity: 0; color: #eee; }
+
+  /* ---------- overflow (only between 1024 and 1039) ---------- */
+  .o-carousel { display: flex; gap: 8px; overflow-x: auto; }
+  .o-carousel > div { flex: 0 0 600px; height: 60px; background: #eef; }
+  @media (min-width: 1024px) and (max-width: 1039px) { .o-band { width: 1100px; } }
+  @media (min-width: 1040px) { .o-band { background: #dfd; } } /* with max-width: 1039px above: a fractional-zoom gap */
+  .o-band { height: 20px; background: #fdd; }
+
+  /* ---------- grid ---------- */
+  .g-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 900px; }
+  .g-card { background: #f4f4f4; padding: 8px; min-height: 80px; }
+  .g-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
+  .g-grid.ok .g-card { min-width: 0; overflow-wrap: anywhere; }
+  .g-pills { display: flex; gap: 8px; margin-top: 12px; }
+  .g-pill { padding: 24px 16px; background: #eef; min-width: 100px; }
+
+  /* ---------- rules ---------- */
+  .r-box { color: red; margin-top: 7px; position: relative; }
+  #r-target { color: blue; }
+  @media (max-width: 500px) { .r-box { color: green; } }
+  @layer base { #r-target { margin-top: 5px; } }
+  .r-box::after { content: "x"; position: absolute; right: 0; }
+  .r-parent { & .r-box { padding-top: 3px; } }
+
+  /* ---------- theme ---------- */
+  .t-probe { color: #111; background: #fafafa; }
+  [data-theme="dark"] .t-probe { color: #f0f0f0; background: #101010; }
+  .t-ld { color: light-dark(#111111, #eeeeee); transition: color 0.3s; }
+
+  /* ---------- visible ---------- */
+  .v-hero { position: relative; height: 120px; margin-top: 8px; }
+  .v-hero .v-frame { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  #v-static .v-text { position: static; padding: 16px; }
+  #v-relative .v-text { position: relative; padding: 16px; }
+  .v-trap { position: relative; height: 60px; margin-top: 8px; }
+  .v-trap .v-glass { position: absolute; inset: 0; }
+  .v-clipbox { width: 200px; height: 40px; overflow: hidden; position: relative; margin-top: 8px; background: #eee; }
+  #v-clipped { position: absolute; left: 400px; top: 0; }
+  #v-transparent { opacity: 0; }
+
+  /* ---------- clipped ---------- */
+  #cl-btn { width: 80px; white-space: nowrap; }
+  #cl-card { height: 40px; overflow: hidden; width: 240px; background: #f4f4f4; }
+  #cl-ellipsis { width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cl-xclip { overflow-x: clip; height: 30px; }
+  .cl-xclip p { margin: 0; position: relative; top: 20px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+  /* ---------- images ---------- */
+  .i-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+  #i-distorted { width: 200px; height: 200px; }
+  #i-blurry { width: 200px; height: 200px; }
+  #i-oversized { width: 200px; height: 100px; }
+
+  /* ---------- mobile ---------- */
+  #m-tiny { font-size: 10px; }
+  #m-input { font-size: 14px; }
+  .m-icons { display: flex; gap: 4px; margin-top: 8px; }
+  .m-icons button, #m-lonely { width: 16px; height: 16px; padding: 0; border: 1px solid #888; background: #fff; }
+  .m-island { padding: 40px; }
+  #m-big { min-width: 44px; min-height: 44px; }
+</style>
+</head>
+<body>
+
+<section id="contrast">
+  <h2>Contrast</h2>
+  <p id="c-ok">Plain dark text on white.</p>
+  <p id="c-oklch-fail">Light oklch text on a color-mix background.</p>
+  <p id="c-oklch-pass">Dark oklch text on a color-mix tint.</p>
+  <div class="c-dark"><p id="c-translucent">Light text on a 14% white panel over dark.</p></div>
+  <p id="c-gradient">Dark text on an oklch gradient.</p>
+  <div class="c-hero"><div class="c-shade"></div><p id="c-sibling">Light text over a dark sibling layer.</p></div>
+  <div class="c-photo" id="c-photo-strong"><img data-gen="400x120" alt=""><div class="c-veil"></div><p>White text, 70% black veil over a photo.</p></div>
+  <div class="c-photo" id="c-photo-weak"><img data-gen="400x120" alt=""><div class="c-veil"></div><p>White text, 20% black veil over a photo.</p></div>
+  <div id="c-bgphoto"><p>White text on a CSS background image — pixels unknown.</p></div>
+  <button id="c-disabled" disabled>Disabled light button</button>
+  <p id="c-reveal">Waiting for a reveal animation.</p>
+</section>
+
+<section id="overflow">
+  <h2>Overflow</h2>
+  <div class="o-carousel"><div>slide 1</div><div>slide 2</div><div>slide 3</div></div>
+  <div class="o-band">breaks only at 1024–1039px</div>
+</section>
+
+<section id="grid">
+  <h2>Grid</h2>
+  <div class="g-grid bad">
+    <div class="g-card"><img data-gen="320x180" alt="">Short card</div>
+    <div class="g-card"><img data-gen="320x180" alt="">https://example.com/a/really/long/unbreakable/path/that/forces/min-content/width/wider/than/the/track</div>
+    <div class="g-card"><img data-gen="320x180" alt="">Short card</div>
+  </div>
+  <div class="g-grid ok" style="margin-top:12px">
+    <div class="g-card"><img data-gen="320x180" alt="">Short card</div>
+    <div class="g-card"><img data-gen="320x180" alt="">https://example.com/a/really/long/unbreakable/path/that/forces/min-content/width/wider/than/the/track</div>
+    <div class="g-card"><img data-gen="320x180" alt="">Short card</div>
+  </div>
+  <div class="g-pills"><a class="g-pill" href="#grid">Telegram channel</a><a class="g-pill" href="#grid">Chat</a><a class="g-pill" href="#grid">Currency exchange</a></div>
+</section>
+
+<section id="rules">
+  <h2>Rules</h2>
+  <div class="r-parent"><div id="r-target" class="r-box">rule target</div></div>
+</section>
+
+<section id="theme">
+  <h2>Theme</h2>
+  <p class="t-probe" id="t-probe">Theme probe</p>
+  <p class="t-ld" id="t-ld">light-dark() with a transition</p>
+  <p id="t-js">Colour set by a script on dark, never reset</p>
+</section>
+
+<section id="glyphs">
+  <h2>Glyphs</h2>
+  <p id="g-text" style="font-family: Subset">A « → €</p>
+</section>
+
+<section id="visible">
+  <h2>Visible</h2>
+  <div class="v-hero" id="v-static"><img class="v-frame" data-gen="600x120" alt=""><div class="v-text"><h3 id="v-static-title">Hidden title</h3></div></div>
+  <div class="v-hero" id="v-relative"><img class="v-frame" data-gen="600x120" alt=""><div class="v-text"><h3 id="v-relative-title">Visible title</h3></div></div>
+  <div class="v-trap"><button id="v-trapped">Buy</button><div class="v-glass"></div></div>
+  <div class="v-clipbox"><span id="v-clipped">Out of the box</span></div>
+  <p id="v-transparent">Invisible paragraph</p>
+</section>
+
+<section id="clipped">
+  <h2>Clipped</h2>
+  <button id="cl-btn">Subscribe to the newsletter</button>
+  <div id="cl-card">Line one of the card. Line two of the card. Line three of the card. Line four of the card. Line five of the card.</div>
+  <div id="cl-ellipsis">This text is truncated on purpose with an ellipsis</div>
+  <span class="sr-only">Screen-reader only label</span>
+  <p id="cl-ok">An ordinary paragraph that wraps normally inside its box.</p>
+  <div class="cl-xclip" id="cl-xclip"><p>Hangs below a box that clips only horizontally — still visible.</p></div>
+</section>
+
+<section id="images">
+  <h2>Images</h2>
+  <div class="i-row">
+    <img id="i-ok" data-gen="200x100" width="200" height="100" alt="ok">
+    <img id="i-broken" src="missing-image.png" width="50" height="50" alt="broken">
+    <img id="i-distorted" data-gen="200x100" width="200" height="200" alt="distorted">
+    <img id="i-blurry" data-gen="50x50" width="200" height="200" alt="blurry">
+    <img id="i-oversized" data-gen="2000x1000" width="200" height="100" alt="oversized">
+    <img id="i-noalt" data-gen="100x100" width="100" height="100">
+    <img id="i-nodims" data-gen="120x60" alt="no dimensions">
+  </div>
+</section>
+
+<section id="mobile">
+  <h2>Mobile</h2>
+  <p id="m-tiny">Tiny 10px footnote.</p>
+  <input id="m-input" type="email" placeholder="email">
+  <div class="m-icons"><button id="m-ico1" aria-label="one"></button><button id="m-ico2" aria-label="two"></button></div>
+  <div class="m-island"><button id="m-lonely" aria-label="lonely"></button></div>
+  <p>Read the <a id="m-inline" href="#mobile">terms</a> before you continue with this form.</p>
+  <button id="m-big">OK</button>
+</section>
+
+<script>
+  // raster images of exact sizes without shipping binaries
+  const c = document.createElement('canvas');
+  const x = c.getContext('2d');
+  for (const img of document.querySelectorAll('img[data-gen]')) {
+    const [w, h] = img.dataset.gen.split('x').map(Number);
+    c.width = w; c.height = h;
+    const g = x.createLinearGradient(0, 0, w, h);
+    g.addColorStop(0, '#f6f6f6'); g.addColorStop(1, '#3a7');
+    x.fillStyle = g; x.fillRect(0, 0, w, h);
+    img.src = c.toDataURL('image/png');
+  }
+  // a theme bug on purpose: set on dark, never reset on light
+  new MutationObserver(() => {
+    if (document.documentElement.dataset.theme === 'dark') document.getElementById('t-js').style.color = 'rgb(255, 255, 255)';
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+</script>
+</body>
+</html>

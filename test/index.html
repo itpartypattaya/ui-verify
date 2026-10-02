@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ui-verify self-test</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; }
+  table { border-collapse: collapse; width: 100%; }
+  td { border-top: 1px solid #ddd; padding: 4px 8px; vertical-align: top; cursor: pointer; }
+  tr.pass td:first-child { color: #0a7a2f; font-weight: 600; }
+  tr.fail td:first-child { color: #b00020; font-weight: 600; }
+  .y { color: #0a7a2f; } .n { color: #b00020; font-weight: 600; }
+  pre { background: #f6f6f6; padding: 8px; max-height: 40vh; overflow: auto; }
+  #frames { overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>ui-verify self-test <small id="summary">running…</small></h1>
+<p>Each row runs one check against <a href="fixtures.html">fixtures.html</a> at the given width. Click a row to see the raw result.</p>
+<table><tbody></tbody></table>
+<pre id="json"></pre>
+<div id="frames"></div>
+<script type="module" src="run.js"></script>
+</body>
+</html>

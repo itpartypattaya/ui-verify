@@ -1,0 +1,19 @@
+{
+  "name": "ui-verify",
+  "owner": {
+    "name": "itpartypattaya",
+    "url": "https://github.com/itpartypattaya"
+  },
+  "metadata": {
+    "description": "Layout verification for web developers: measure the page, don't trust the screenshot."
+  },
+  "plugins": [
+    {
+      "name": "ui-verify",
+      "source": "./",
+      "description": "Verify web layout in a real browser with numbers instead of eyeballing screenshots.",
+      "version": "1.0.0",
+      "category": "development"
+    }
+  ]
+}
