@@ -9,11 +9,13 @@
  *    checked for differing widths, differing heights within a row, and
  *    differing media (first img/video) sizes. Widths of content-sized flex items
  *    (flex: 0 1 auto: pills, tags) are not compared — they differ on purpose;
- *    use selector mode when such items are meant to be equal.
+ *    use selector mode when such items are meant to be equal. Widths that stay
+ *    the same with every item emptied (a 1.5fr 1fr 1fr template, flex-grow
+ *    ratios) are by design: listed in byDesign, not reported as a defect.
  * One size per list = even. Several = defect, and the outliers are named.
  *
  * Options: { cells, inner, tolerance = 1, max = 10, minW = 100, minH = 60 }
- * Returns: { ok, groups[] } (auto) or { ok, cells[], inner[] } (selectors)
+ * Returns: { ok, groups[], byDesign[] } (auto) or { ok, cells[], inner[] } (selectors)
  */
 (opts = {}) => {
   // Probe capabilities before measuring or changing the page. Browser-tool
@@ -94,6 +96,32 @@
     return { check: 'grid', ok: c.length <= 1 && i.length <= 1, cells: c, inner: i };
   }
 
+  // Uneven widths are by design when the container lays the items out the same way with all of
+  // them emptied (an explicit 1.5fr 1fr 1fr template, flex-grow ratios); a content blowout (a long
+  // word under min-width: auto) disappears with the content. Probe: a hidden copy of the
+  // container with shallow item clones, measured and removed in the same task (never painted).
+  const widthsByDesign = (parent, items) => {
+    let copy = null;
+    try {
+      copy = parent.cloneNode(false);
+      for (const ch of parent.children) copy.appendChild(ch.cloneNode(false));
+      const pcs = getComputedStyle(parent);
+      copy.style.setProperty('position', 'absolute', 'important');
+      copy.style.setProperty('visibility', 'hidden', 'important');
+      copy.style.setProperty('width', pcs.width, 'important');
+      parent.after(copy);
+      const at = [...parent.children];
+      return items.every((it) => {
+        const c = copy.children[at.indexOf(it.el)];
+        return !!c && Math.abs(c.getBoundingClientRect().width - it.w) <= Math.max(2, tolerance);
+      });
+    } catch {
+      return false; // cannot tell (read-only DOM) — keep reporting it
+    } finally {
+      if (copy) copy.remove();
+    }
+  };
+  const byDesign = [];
   const sig = (el) => el.tagName + '.' + [...el.classList].sort().join('.');
   const groups = [];
   for (const parent of document.body.querySelectorAll('*')) {
@@ -121,7 +149,10 @@
         return ics.flexBasis === 'auto' && parseFloat(ics.flexGrow) === 0;
       });
       const widths = cluster(items, 'w');
-      if (widths.length > 1 && !contentSized) {
+      if (widths.length > 1 && !contentSized && widthsByDesign(parent, items)) {
+        const pcs = getComputedStyle(parent);
+        byDesign.push({ container: name(parent), template: d.includes('grid') ? pcs.gridTemplateColumns : `${pcs.flexDirection} ${pcs.flexWrap}`, widths: widths.map((w) => Math.round(w.value)) });
+      } else if (widths.length > 1 && !contentSized) {
         problems.push(`widths differ: ${widths.map((w) => `${Math.round(w.value)}px ×${w.count}`).join(', ')}`);
         widths.slice(1).forEach((w) => w.els.forEach((e) => outliers.add(e)));
       }
@@ -160,5 +191,5 @@
     }
     if (groups.length >= max) break;
   }
-  return { check: 'grid', ok: groups.length === 0, groups };
+  return { check: 'grid', ok: groups.length === 0, groups, byDesign: byDesign.slice(0, max) };
 }

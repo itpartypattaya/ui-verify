@@ -46,6 +46,8 @@
   .g-card img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; }
   .g-grid.ok .g-card { min-width: 0; overflow-wrap: anywhere; }
   .g-pills { display: flex; gap: 8px; margin-top: 12px; }
+  .g-grid.wide { grid-template-columns: 1.5fr 1fr 1fr; margin-top: 12px; } /* uneven on purpose, like a footer */
+  .g-col { background: #eef; padding: 8px; min-height: 80px; }
   .g-pill { padding: 24px 16px; background: #eef; min-width: 100px; }
 
   /* ---------- rules ---------- */
@@ -185,6 +187,11 @@
     <div class="g-card"><img data-gen="320x180" alt="">Short card</div>
     <div class="g-card"><img data-gen="320x180" alt="">https://example.com/a/really/long/unbreakable/path/that/forces/min-content/width/wider/than/the/track</div>
     <div class="g-card"><img data-gen="320x180" alt="">Short card</div>
+  </div>
+  <div class="g-grid wide">
+    <div class="g-col">About the company, a longer column</div>
+    <div class="g-col">Links</div>
+    <div class="g-col">Contacts</div>
   </div>
   <div class="g-pills"><a class="g-pill" href="#grid">Telegram channel</a><a class="g-pill" href="#grid">Chat</a><a class="g-pill" href="#grid">Currency exchange</a></div>
 </section>

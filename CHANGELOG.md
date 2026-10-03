@@ -20,6 +20,11 @@ result (C34). Self-test 94 → 100.
   counts as an import; C30 now asserts the request was really made.
 - `references/adapters.md`: `rules` listed as async; when a sheet stays unread,
   and that a fetched sheet with `@import` is still read apart from the import.
+- `grid`: columns that are uneven on purpose (a `1.5fr 1fr 1fr` footer,
+  flex-grow ratios) are no longer reported as a defect. A hidden copy of the
+  container with emptied items is measured: if the widths stay the same, the
+  layout is by design (listed in `byDesign`); a content blowout disappears.
+  Found on a live site during the Chrome run of this release.
 
 ## 1.2.0 — 2026-10-03
 
