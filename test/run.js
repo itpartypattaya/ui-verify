@@ -69,6 +69,9 @@ const cases = [
     ['bad grid flagged', has(r.groups.map((g) => g.container), 'g-grid.bad')], ['ok grid clean', !has(r.groups.map((g) => g.container), 'g-grid.ok')],
     ['image gallery row not flagged', !has(r.groups.map((g) => g.container), 'i-row')],
     ['content-sized pills not flagged', !has(r.groups.map((g) => g.container), 'g-pills')],
+    ['1.5fr 1fr 1fr template not flagged', !has(r.groups.map((g) => g.container), 'g-grid.wide')],
+    ['…and listed as by design', has(r.byDesign.map((g) => g.container), 'g-grid.wide')],
+    ['blown-out grid not excused as by design', !has(r.byDesign.map((g) => g.container), 'g-grid.bad')],
     ['min-width hint', has(r.groups.find((g) => g.container.includes('g-grid.bad')), 'min-width: 0')]]],
   ['grid: selector mode on the fixed grid', 1280, 'grid.js', { cells: '.g-grid.ok .g-card', inner: '.g-grid.ok img' }, (r) => [['ok', r.ok === true]]],
 

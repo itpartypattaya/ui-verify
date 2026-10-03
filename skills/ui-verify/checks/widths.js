@@ -80,8 +80,18 @@ async (opts = {}) => {
     }
   };
   // A cross-origin sheet without CORS hides its rules from the CSSOM, but CDNs such as Google
-  // Fonts allow fetch: re-parse that text in a constructed sheet. Its @import rules are dropped.
-  const recover = async (roots) => {
+  // Fonts allow fetch: re-parse that text in a constructed sheet. It is a second download — the
+  // HTTP cache (force-cache) usually hands back the response the page used, but a changed server
+  // can differ. replaceSync drops @import: the other rules are read, but an @import outside
+  // comments and strings (escapes decoded: @i\6dport is one) keeps coverage incomplete.
+  // Request + body share a 3 s budget.
+  const atKeywords = (css) => (css.match(/@(?:[\w-]|\\[0-9a-fA-F]{1,6}\s?|\\[^\n0-9a-fA-F])+/g) || [])
+    .map((k) => k.slice(1).replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, (_, hex, ch) => {
+      if (!hex) return ch;
+      const n = parseInt(hex, 16);
+      return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '�';
+    }).toLowerCase());
+  const recover = async (sheets) => {
     const got = new Map();
     if (typeof fetch !== 'function' || typeof CSSStyleSheet !== 'function' || typeof setTimeout !== 'function') return got;
     const hidden = [];
@@ -90,21 +100,30 @@ async (opts = {}) => {
       try { rules = s.cssRules; } catch { if (s.href) hidden.push(s); return; }
       try { for (const r of rules) if (r.type === 3 && r.styleSheet) gather(r.styleSheet); } catch { /* reported by the walk */ }
     };
-    roots.forEach(gather);
-    await Promise.all(hidden.map(async (s) => {
+    sheets.forEach(gather);
+    await Promise.all(hidden.slice(0, 20).map(async (s) => {
+      const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      let timer;
       try {
-        const res = await Promise.race([fetch(s.href), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 3000))]);
-        if (!res.ok) return;
-        const text = await res.text();
+        const text = await Promise.race([
+          fetch(s.href, { cache: 'force-cache', signal: ctl ? ctl.signal : undefined }).then((res) => (res.ok ? res.text() : null)),
+          new Promise((_, no) => { timer = setTimeout(() => no(new Error('timeout')), 3000); }),
+        ]);
+        if (text === null) return;
         const copy = new CSSStyleSheet();
         copy.replaceSync(text);
-        got.set(s, { rules: copy.cssRules, imports: /@import/i.test(text) });
-      } catch { /* stays unreadable */ }
+        const bare = text.replace(/\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*'/g, ''); // no comments, no strings
+        got.set(s, { rules: copy.cssRules, imports: atKeywords(bare).includes('import') });
+      } catch { /* stays unreadable */ } finally {
+        clearTimeout(timer);
+        if (ctl) ctl.abort();
+      }
     }));
     return got;
   };
-  const roots = [...document.styleSheets, ...(document.adoptedStyleSheets || [])];
-  const recovered = await recover(roots);
+  const sheetList = () => [...document.styleSheets, ...(document.adoptedStyleSheets || [])];
+  const recovered = await recover(sheetList());
+  const roots = sheetList(); // re-read: the page may have added sheets while we waited — a new hidden one stays unread
   const fetched = [];
   const read = (s) => {
     collect(s.media && s.media.mediaText);

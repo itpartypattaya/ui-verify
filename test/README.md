@@ -22,7 +22,11 @@ APIs must return an inconclusive result, constructor-free CSSOM must still
 find defects and healthy controls, and incomplete CSS must not claim a pass.
 The full-window control also tests the capability preflight. `cross.css` and
 `cross-import.css` play cross-origin sheets the CSSOM hides: the checks must
-fetch and re-read them (and report an `@import` they cannot follow).
+fetch and re-read them (and report an `@import` they cannot follow);
+`cross-equal.css`, `cross-comment.css` and `cross-escaped.css` cover source
+order, an import mentioned in a comment, an escaped `@import`; `cross-string.css`
+an import keyword inside a CSS string; `cross-escaped-mid.css` and
+`cross-escaped-media.css` an import escaped mid-name and an escaped `@media`.
 
 Notes:
 

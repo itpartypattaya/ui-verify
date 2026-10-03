@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.2.1 — 2026-10-03
+
+Second Codex review of the 1.2.0 sheet re-fetching; each finding reproduced by
+a case that fails on 1.2.0 (C29–C33), then an Antigravity review of the
+result (C34) and the Codex review on the pull request (C35, C36).
+Self-test 94 → 102.
+
+- The 3 s budget now covers the response body too (a body that never ended
+  hung `widths`/`rules`); expired requests are aborted, at most 20 sheets are
+  fetched.
+- Fetches use the HTTP cache first (`force-cache`), so the copy is usually
+  the response the page used. `rules` marks candidates from re-fetched sheets
+  `refetched` and notes it when one is the likely winner.
+- `@import` detection ignores comments and decodes CSS escapes anywhere in
+  the at-rule name (`@\69mport`, `@i\6dport` are imports; an escaped `@media`
+  is not), keeping coverage incomplete only for a real import.
+- The stylesheet list is re-read after the fetches: a sheet the page added
+  meanwhile is no longer silently skipped.
+- `@import` mentioned inside a CSS string (`content: "@import …"`) no longer
+  counts as an import; C30 now asserts the request was really made.
+- `references/adapters.md`: `rules` listed as async; when a sheet stays unread,
+  and that a fetched sheet with `@import` is still read apart from the import.
+- `grid`: columns that are uneven on purpose (a `1.5fr 1fr 1fr` footer,
+  flex-grow ratios) are no longer reported as a defect. A hidden copy of the
+  container with emptied items is measured: if the widths stay the same, the
+  layout is by design (listed in `byDesign`); a content blowout disappears.
+  Found on a live site during the Chrome run of this release.
+
 ## 1.2.0 — 2026-10-03
 
 Restricted browser contexts (Codex In-app Browser) and honest CSS coverage.

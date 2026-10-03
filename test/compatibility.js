@@ -106,10 +106,49 @@ compatibilityCases.push(
     ['planning only', r.ok === null && r.tested === 0], ['complete CSS', r.cssCoverage.complete === true],
     ['breakpoints', [500, 1024, 1039].every(b => r.breakpoints.includes(b))],
   ], (w) => ({ ...readOnly(w), fetch: undefined, CSSStyleSheet: undefined })],
-  ['C28 widths: hidden sheet without CSSStyleSheet stays incomplete', 1280, 'widths.js', { listOnly: true }, r => [
+  ['C28 widths: hidden sheet without CSSStyleSheet stays incomplete, no request', 1280, 'widths.js', { listOnly: true }, r => [
     ['incomplete', r.cssCoverage.complete === false], ['nothing fetched', r.fetchedSheets.length === 0],
-  ], (w) => ({ CSSStyleSheet: undefined, document: documentWithout(w, { styleSheets: [...w.document.styleSheets, hiddenSheet(w, 'cross.css')] }) })],
+    ['no request made', spy.calls === 0],
+  ], (w) => ({ CSSStyleSheet: undefined, fetch: spy.wrap(w), document: documentWithout(w, { styleSheets: [...w.document.styleSheets, hiddenSheet(w, 'cross.css')] }) })],
+  // second Codex review of 1.2.0
+  ['C29 rules: a re-fetched sheet keeps its place in source order', 1280, 'rules.js', { selector: '#r-target', props: ['color'] }, r => [
+    ['complete', r.ok === true], ['equal-specificity rule from the earlier sheet listed', r.candidates.color.some(c => c.refetched && /cross-equal/.test(c.sheet))],
+    ['later readable rule wins', r.candidates.color[0].likelyWinner && !r.candidates.color[0].refetched && r.candidates.color[0].value === 'blue'],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-equal.css'), ...w.document.styleSheets] }) })],
+  ['C30 widths: a response body that never ends times out', 1280, 'widths.js', { listOnly: true }, r => [
+    ['finished, incomplete', r.cssCoverage.complete === false], ['nothing fetched', r.fetchedSheets.length === 0],
+    ['the request was made', spy.calls === 1],
+  ], w => ({ fetch: spy.wrap(w, () => Promise.resolve({ ok: true, text: () => new Promise(() => {}) })), document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross.css')] }) })],
+  ['C31 widths: @import inside a comment is not an import', 1280, 'widths.js', { listOnly: true }, r => [
+    ['complete', r.cssCoverage.complete === true], ['its breakpoint', r.breakpoints.includes(666)],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-comment.css')] }) })],
+  ['C32 widths: an escaped @import keeps coverage incomplete', 1280, 'widths.js', { listOnly: true }, r => [
+    ['incomplete', r.cssCoverage.complete === false], ['own media still read', r.breakpoints.includes(555)],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-escaped.css')] }) })],
+  ['C33 widths: a hidden sheet added while fetching is not silently skipped', 1280, 'widths.js', { listOnly: true }, r => [
+    ['incomplete', r.cssCoverage.complete === false], ['late sheet named', has(r.unreadableSheets, 'late.css')],
+  ], (w) => {
+    const sheets = [hiddenSheet(w, 'cross.css')];
+    // the page appends another cross-origin sheet while the check waits for the first fetch
+    return { fetch: (...a) => { sheets.push(hiddenSheet(w, 'late.css')); return w.fetch(...a); }, document: documentWithout(w, { styleSheets: sheets }) };
+  }],
 );
+// review by Antigravity of 1.2.1
+compatibilityCases.push(
+  ['C34 widths: @import inside a CSS string is not an import', 1280, 'widths.js', { listOnly: true }, r => [
+    ['complete', r.cssCoverage.complete === true], ['its breakpoint', r.breakpoints.includes(444)],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-string.css')] }) })],
+  // PR #1 review (Codex connector): escapes anywhere in the at-keyword
+  ['C35 widths: @import escaped mid-name keeps coverage incomplete', 1280, 'widths.js', { listOnly: true }, r => [
+    ['incomplete', r.cssCoverage.complete === false], ['import named', has(r.unreadableSheets, '@import')],
+    ['own media still read', r.breakpoints.includes(333)],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-escaped-mid.css')] }) })],
+  ['C36 widths: an escaped @media is not taken for an import', 1280, 'widths.js', { listOnly: true }, r => [
+    ['complete', r.cssCoverage.complete === true], ['nothing unread', r.unreadableSheets.length === 0],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-escaped-media.css')] }) })],
+);
+// counts fetch calls for the case that wraps it (reset on each wrap); `impl` replaces the real fetch
+const spy = { calls: 0, wrap(w, impl = (...a) => w.fetch(...a)) { spy.calls = 0; return (...a) => { spy.calls++; return impl(...a); }; } };
 // the API inventory Codex recorded in its In-app Browser evaluate (read-only DOM)
 function readOnly(w) {
   return { ...missingConstructors(), performance: undefined, requestAnimationFrame: undefined, Image: undefined,

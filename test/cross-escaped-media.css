@@ -1,0 +1,2 @@
+/* An escaped media at-rule (\6d = m) is still a media rule, not an import. */
+@\6d edia (max-width: 222px) { .cross-marker { display: none; } }

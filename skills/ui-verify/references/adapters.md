@@ -12,7 +12,7 @@ tool can accept it:
   top-level `await` (Claude's `javascript_tool`, the DevTools console). Where
   it does not, return the promise — `(<file text>)({ … })` — if the tool
   awaits it (Playwright/Puppeteer `page.evaluate` do). Async checks:
-  `settle`, `theme`, `glyphs`, `widths`, `images`.
+  `settle`, `theme`, `glyphs`, `widths`, `images`, `rules`.
 
 Return values are JSON. Never return DOM nodes — the checks already return
 names like `div.card#promo` and short text samples.
@@ -35,9 +35,14 @@ records access errors, `traversalErrors` records failures while walking rules.
 These are different from "no media queries". A sweep with incomplete CSS
 cannot pass (a measured defect can still fail). `rules` also withholds a
 likely winner if some stylesheet rules could not be read. Before giving up on
-a cross-origin sheet, both checks fetch it and re-parse the text (listed in
-`fetchedSheets`): Google Fonts and most CDNs allow that, so only sheets
-without CORS headers, or `@import`s inside a fetched sheet, stay unread.
+a cross-origin sheet, both checks fetch it again (HTTP cache first) and
+re-parse the text, listed in `fetchedSheets`. Google Fonts and most CDNs allow
+that. A sheet stays unread when it has no CORS headers, the request fails or
+takes over 3 s, or the context lacks `fetch` or `CSSStyleSheet`. A fetched
+sheet with an `@import` is read except for the import, which is not followed,
+so coverage stays incomplete. A re-fetched copy can differ from what the page
+loaded if the server changed the file since: `rules` marks such candidates
+`refetched` and notes it when one of them is the likely winner.
 
 ## Codex In-app Browser
 

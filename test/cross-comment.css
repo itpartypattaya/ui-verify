@@ -1,0 +1,2 @@
+/* A comment that mentions @import url("x.css") is not an import. */
+@media (max-width: 666px) { .cross-marker { display: none; } }
