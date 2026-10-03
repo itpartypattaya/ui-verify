@@ -1,0 +1,3 @@
+/* Hidden sheet placed BEFORE the readable ones: same specificity as the
+   fixture rule #r-target { color: blue }, so source order must let blue win. */
+#r-target { color: rgb(9, 9, 9); }

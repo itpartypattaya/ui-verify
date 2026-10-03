@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.2.1 — 2026-10-03
+
+Second Codex review of the 1.2.0 sheet re-fetching; each finding reproduced by
+a case that fails on 1.2.0 (C29–C33), then an Antigravity review of the
+result (C34). Self-test 94 → 100.
+
+- The 3 s budget now covers the response body too (a body that never ended
+  hung `widths`/`rules`); expired requests are aborted, at most 20 sheets are
+  fetched.
+- Fetches use the HTTP cache first (`force-cache`), so the copy is usually
+  the response the page used. `rules` marks candidates from re-fetched sheets
+  `refetched` and notes it when one is the likely winner.
+- `@import` detection ignores comments and treats escaped at-rules
+  (`@\69mport`) as possible imports, keeping coverage incomplete.
+- The stylesheet list is re-read after the fetches: a sheet the page added
+  meanwhile is no longer silently skipped.
+- `@import` mentioned inside a CSS string (`content: "@import …"`) no longer
+  counts as an import; C30 now asserts the request was really made.
+- `references/adapters.md`: `rules` listed as async; when a sheet stays unread,
+  and that a fetched sheet with `@import` is still read apart from the import.
+
 ## 1.2.0 — 2026-10-03
 
 Restricted browser contexts (Codex In-app Browser) and honest CSS coverage.

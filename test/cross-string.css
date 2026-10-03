@@ -1,0 +1,4 @@
+/* A string that merely contains the import keyword is not an import rule. */
+.cross-marker::before { content: "@import url(x.css);"; }
+.cross-marker::after { content: '@\69mport'; }
+@media (max-width: 444px) { .cross-marker { display: none; } }

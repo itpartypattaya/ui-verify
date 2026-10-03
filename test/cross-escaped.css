@@ -1,0 +1,4 @@
+/* The first rule is an escaped import at-rule (\69 = i): CSS parses it as one,
+   a plain text search for the keyword would not. */
+@\69mport url("cross.css");
+@media (min-width: 555px) { .cross-marker { display: none; } }

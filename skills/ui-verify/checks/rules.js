@@ -157,6 +157,7 @@ async (opts = {}) => {
             selector: best.h,
             specificity: best.s,
             sheet: short(sheet.href),
+            refetched: refetched.has(sheet) || undefined,
             at: ctx.map((c) => `${c.type} ${c.text}`.trim()),
             layer: lp || null,
             active: ctx.some((c) => c.active === false) ? false : ctx.some((c) => c.active === null) ? null : true,
@@ -205,8 +206,12 @@ async (opts = {}) => {
     }
   };
   // A cross-origin sheet without CORS hides its rules from the CSSOM, but CDNs such as Google
-  // Fonts allow fetch: re-parse that text in a constructed sheet. Its @import rules are dropped.
-  const recover = async (roots) => {
+  // Fonts allow fetch: re-parse that text in a constructed sheet. It is a second download — the
+  // HTTP cache (force-cache) usually hands back the response the page used, but a changed server
+  // can differ — so its rules are marked `refetched`. replaceSync drops @import: the other rules
+  // are read, but an import (or an escaped at-rule we cannot read) outside comments and strings
+  // keeps coverage incomplete. Request + body share a 3 s budget.
+  const recover = async (sheets) => {
     const got = new Map();
     if (typeof fetch !== 'function' || typeof CSSStyleSheet !== 'function' || typeof setTimeout !== 'function') return got;
     const hidden = [];
@@ -215,22 +220,32 @@ async (opts = {}) => {
       try { rules = s.cssRules; } catch { if (s.href) hidden.push(s); return; }
       try { for (const r of rules) if (r.type === 3 && r.styleSheet) gather(r.styleSheet); } catch { /* reported by the walk */ }
     };
-    roots.forEach(gather);
-    await Promise.all(hidden.map(async (s) => {
+    sheets.forEach(gather);
+    await Promise.all(hidden.slice(0, 20).map(async (s) => {
+      const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+      let timer;
       try {
-        const res = await Promise.race([fetch(s.href), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 3000))]);
-        if (!res.ok) return;
-        const text = await res.text();
+        const text = await Promise.race([
+          fetch(s.href, { cache: 'force-cache', signal: ctl ? ctl.signal : undefined }).then((res) => (res.ok ? res.text() : null)),
+          new Promise((_, no) => { timer = setTimeout(() => no(new Error('timeout')), 3000); }),
+        ]);
+        if (text === null) return;
         const copy = new CSSStyleSheet();
         copy.replaceSync(text);
-        got.set(s, { rules: copy.cssRules, imports: /@import/i.test(text) });
-      } catch { /* stays unreadable */ }
+        const bare = text.replace(/\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*'/g, ''); // no comments, no strings
+        got.set(s, { rules: copy.cssRules, imports: /@(import|\\)/i.test(bare) });
+      } catch { /* stays unreadable */ } finally {
+        clearTimeout(timer);
+        if (ctl) ctl.abort();
+      }
     }));
     return got;
   };
-  const roots = [...document.styleSheets, ...(document.adoptedStyleSheets || [])];
-  const recovered = await recover(roots);
+  const sheetList = () => [...document.styleSheets, ...(document.adoptedStyleSheets || [])];
+  const recovered = await recover(sheetList());
+  const roots = sheetList(); // re-read: the page may have added sheets while we waited — a new hidden one stays unread
   const fetched = [];
+  const refetched = new Set();
   const readSheet = (sheet, ctx = [], lp = '') => {
     let rules;
     try { rules = sheet.cssRules; } catch {
@@ -238,6 +253,7 @@ async (opts = {}) => {
       if (!got) { unreadable.push(sheet.href || '(unknown)'); return; }
       rules = got.rules;
       fetched.push(short(sheet.href));
+      refetched.add(sheet);
       if (got.imports) unreadable.push(`${sheet.href} (its @import rules — not followed after a fetch)`);
     }
     const media = sheet.media && sheet.media.mediaText;
@@ -260,7 +276,7 @@ async (opts = {}) => {
       .map((f) => ({
         value: f.style.getPropertyValue(p),
         important: f.style.getPropertyPriority(p) === 'important',
-        selector: f.selector, specificity: f.specificity.join(','), sheet: f.sheet,
+        selector: f.selector, specificity: f.specificity.join(','), sheet: f.sheet, refetched: f.refetched,
         at: f.at.length ? f.at.join(' › ') : null, layer: f.layer,
         active: f.active === null ? 'unknown (@container/@scope)' : f.active,
         _spec: f.specificity, _layer: layerKey(f.layer), order: f.order,
@@ -291,7 +307,10 @@ async (opts = {}) => {
       return y.order - x.order;
     };
     list.sort(stronger);
-    if (!unreadable.length && !traversalErrors.length && list[0] && list[0].active === true) list[0].likelyWinner = true;
+    if (!unreadable.length && !traversalErrors.length && list[0] && list[0].active === true) {
+      list[0].likelyWinner = true;
+      if (list[0].refetched) notesFor.push(`${p}: the likely winner comes from a re-fetched copy of ${list[0].sheet} — if the server changed that file since the page loaded, the page still uses the old one; check the value against computed`);
+    }
     else if (list[0] && typeof list[0].active === 'string') notesFor.push(`${p}: the strongest candidate sits in an unresolved @container/@scope — no winner named`);
     candidates[p] = list.map(({ order: _o, _spec, _layer, inline: _i, ...c }) => c);
   }
