@@ -65,11 +65,7 @@ export const compatibilityCases = [
     ['not acceptance', r.ok === null], ['five modes', r.availableModes.length === 5],
     ['rules and probe', r.availableModes.includes('rules') && r.availableModes.includes('theme:probe')],
     ['canvas unavailable', r.apis['Canvas 2D'] === false],
-  ], w => ({ ...missingConstructors(), performance: undefined, requestAnimationFrame: undefined, Image: undefined,
-    document: documentWithout(w, { createElement: undefined, createTextNode: undefined, createTreeWalker: undefined, getAnimations: undefined, fonts: {},
-      documentElement: new Proxy(w.document.documentElement, { get: (n, k) => ['setAttribute', 'cloneNode'].includes(k) ? undefined : Reflect.get(n, k, n) }),
-    }),
-  })],
+  ], readOnly],
   ['C19 rules: partial CSS never names a winner', 1280, 'rules.js', { selector: '#r-target', props: ['color'] }, r => [
     ['inconclusive', r.ok === null], ['computed value retained', r.computed.color === 'rgb(0, 0, 255)'],
     ['no false winner', r.candidates.color.every(c => !c.likelyWinner)],
@@ -99,6 +95,29 @@ export const compatibilityCases = [
     ['import named', has(r.unreadableSheets, '@import')],
   ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-import.css')] }) })],
 ];
+// The 1.2.0 sheet recovery (fetch + CSSStyleSheet) must not break the read-only context
+// recorded in the Codex In-app Browser — there neither may exist.
+compatibilityCases.push(
+  ['C26 rules: read-only context without fetch still names the winner', 1280, 'rules.js', { selector: '#r-target', props: ['color'] }, r => [
+    ['complete', r.ok === true], ['nothing fetched', r.fetchedSheets.length === 0],
+    ['winner', r.candidates.color[0].likelyWinner && r.candidates.color[0].selector === '#r-target'],
+  ], (w) => ({ ...readOnly(w), fetch: undefined, CSSStyleSheet: undefined })],
+  ['C27 widths: read-only context without fetch still lists breakpoints', 1280, 'widths.js', { listOnly: true }, r => [
+    ['planning only', r.ok === null && r.tested === 0], ['complete CSS', r.cssCoverage.complete === true],
+    ['breakpoints', [500, 1024, 1039].every(b => r.breakpoints.includes(b))],
+  ], (w) => ({ ...readOnly(w), fetch: undefined, CSSStyleSheet: undefined })],
+  ['C28 widths: hidden sheet without CSSStyleSheet stays incomplete', 1280, 'widths.js', { listOnly: true }, r => [
+    ['incomplete', r.cssCoverage.complete === false], ['nothing fetched', r.fetchedSheets.length === 0],
+  ], (w) => ({ CSSStyleSheet: undefined, document: documentWithout(w, { styleSheets: [...w.document.styleSheets, hiddenSheet(w, 'cross.css')] }) })],
+);
+// the API inventory Codex recorded in its In-app Browser evaluate (read-only DOM)
+function readOnly(w) {
+  return { ...missingConstructors(), performance: undefined, requestAnimationFrame: undefined, Image: undefined,
+    document: documentWithout(w, { createElement: undefined, createTextNode: undefined, createTreeWalker: undefined, getAnimations: undefined, fonts: {},
+      documentElement: new Proxy(w.document.documentElement, { get: (n, k) => ['setAttribute', 'cloneNode'].includes(k) ? undefined : Reflect.get(n, k, n) }),
+    }),
+  };
+}
 // a sheet whose rules throw on access, like a cross-origin <link> without CORS
 function hiddenSheet(w, file) {
   return { href: new URL(file, w.location.href).href, media: { mediaText: '' }, get cssRules() { throw new w.DOMException('Cannot access rules', 'SecurityError'); } };

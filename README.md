@@ -132,8 +132,8 @@ healthy control for each (an oklch colour on `color-mix()`, a carousel that
 must *not* count as overflow, an ellipsis that must *not* count as clipped
 text, a theme bug, a font subset without `→` and `€` …). `test/index.html`
 runs every check against it at the right width and asserts both what must be
-found and what must not: **91 / 91 pass in Chrome 152**. 31 of them are
-regressions from two independent reviews of 1.0 (Codex, Antigravity); 25 more
+found and what must not: **94 / 94 pass in Chrome 152**. 31 of them are
+regressions from two independent reviews of 1.0 (Codex, Antigravity); 28 more
 cover restricted contexts, missing browser APIs and cross-origin stylesheets.
 The Codex In-app Browser adapter was also tested in its real read-only
 evaluation context; unsupported modes return inconclusive results.

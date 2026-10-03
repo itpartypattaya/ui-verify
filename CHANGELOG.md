@@ -17,7 +17,8 @@ Restricted browser contexts (Codex In-app Browser) and honest CSS coverage.
   the CSSOM hides when CORS allows it (Google Fonts, most CDNs) — otherwise
   the rule above would make every site with a font CDN inconclusive.
   Re-read sheets are listed in `fetchedSheets`.
-- Add 25 capability and coverage regressions alongside all 66 existing browser tests.
+- Add 28 capability and coverage regressions alongside all 66 existing browser tests
+  (C26–C28: sheet re-fetching inside the read-only context Codex recorded).
 
 ## 1.1.0 — 2026-10-03
 
