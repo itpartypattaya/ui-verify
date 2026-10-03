@@ -209,8 +209,14 @@ async (opts = {}) => {
   // Fonts allow fetch: re-parse that text in a constructed sheet. It is a second download — the
   // HTTP cache (force-cache) usually hands back the response the page used, but a changed server
   // can differ — so its rules are marked `refetched`. replaceSync drops @import: the other rules
-  // are read, but an import (or an escaped at-rule we cannot read) outside comments and strings
+  // are read, but an @import outside comments and strings (escapes decoded: @i\6dport is one)
   // keeps coverage incomplete. Request + body share a 3 s budget.
+  const atKeywords = (css) => (css.match(/@(?:[\w-]|\\[0-9a-fA-F]{1,6}\s?|\\[^\n0-9a-fA-F])+/g) || [])
+    .map((k) => k.slice(1).replace(/\\([0-9a-fA-F]{1,6})\s?|\\(.)/g, (_, hex, ch) => {
+      if (!hex) return ch;
+      const n = parseInt(hex, 16);
+      return n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : '�';
+    }).toLowerCase());
   const recover = async (sheets) => {
     const got = new Map();
     if (typeof fetch !== 'function' || typeof CSSStyleSheet !== 'function' || typeof setTimeout !== 'function') return got;
@@ -233,7 +239,7 @@ async (opts = {}) => {
         const copy = new CSSStyleSheet();
         copy.replaceSync(text);
         const bare = text.replace(/\/\*[\s\S]*?\*\/|"(?:[^"\\\n]|\\[\s\S])*"|'(?:[^'\\\n]|\\[\s\S])*'/g, ''); // no comments, no strings
-        got.set(s, { rules: copy.cssRules, imports: /@(import|\\)/i.test(bare) });
+        got.set(s, { rules: copy.cssRules, imports: atKeywords(bare).includes('import') });
       } catch { /* stays unreadable */ } finally {
         clearTimeout(timer);
         if (ctl) ctl.abort();

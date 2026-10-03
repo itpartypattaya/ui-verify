@@ -4,7 +4,8 @@
 
 Second Codex review of the 1.2.0 sheet re-fetching; each finding reproduced by
 a case that fails on 1.2.0 (C29–C33), then an Antigravity review of the
-result (C34). Self-test 94 → 100.
+result (C34) and the Codex review on the pull request (C35, C36).
+Self-test 94 → 102.
 
 - The 3 s budget now covers the response body too (a body that never ended
   hung `widths`/`rules`); expired requests are aborted, at most 20 sheets are
@@ -12,8 +13,9 @@ result (C34). Self-test 94 → 100.
 - Fetches use the HTTP cache first (`force-cache`), so the copy is usually
   the response the page used. `rules` marks candidates from re-fetched sheets
   `refetched` and notes it when one is the likely winner.
-- `@import` detection ignores comments and treats escaped at-rules
-  (`@\69mport`) as possible imports, keeping coverage incomplete.
+- `@import` detection ignores comments and decodes CSS escapes anywhere in
+  the at-rule name (`@\69mport`, `@i\6dport` are imports; an escaped `@media`
+  is not), keeping coverage incomplete only for a real import.
 - The stylesheet list is re-read after the fetches: a sheet the page added
   meanwhile is no longer silently skipped.
 - `@import` mentioned inside a CSS string (`content: "@import …"`) no longer

@@ -138,6 +138,14 @@ compatibilityCases.push(
   ['C34 widths: @import inside a CSS string is not an import', 1280, 'widths.js', { listOnly: true }, r => [
     ['complete', r.cssCoverage.complete === true], ['its breakpoint', r.breakpoints.includes(444)],
   ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-string.css')] }) })],
+  // PR #1 review (Codex connector): escapes anywhere in the at-keyword
+  ['C35 widths: @import escaped mid-name keeps coverage incomplete', 1280, 'widths.js', { listOnly: true }, r => [
+    ['incomplete', r.cssCoverage.complete === false], ['import named', has(r.unreadableSheets, '@import')],
+    ['own media still read', r.breakpoints.includes(333)],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-escaped-mid.css')] }) })],
+  ['C36 widths: an escaped @media is not taken for an import', 1280, 'widths.js', { listOnly: true }, r => [
+    ['complete', r.cssCoverage.complete === true], ['nothing unread', r.unreadableSheets.length === 0],
+  ], w => ({ document: documentWithout(w, { styleSheets: [hiddenSheet(w, 'cross-escaped-media.css')] }) })],
 );
 // counts fetch calls for the case that wraps it (reset on each wrap); `impl` replaces the real fetch
 const spy = { calls: 0, wrap(w, impl = (...a) => w.fetch(...a)) { spy.calls = 0; return (...a) => { spy.calls++; return impl(...a); }; } };
