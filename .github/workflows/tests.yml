@@ -1,0 +1,25 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    name: self-test (headless Chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      # Only the CDP driver; the browser is the Chrome preinstalled on the runner.
+      - name: Install playwright-core
+        run: npm install --no-save --no-audit --no-fund --no-package-lock playwright-core@1.48.2
+      - name: Run test/index.html and read window.__uiVerify
+        run: CHROME="$(command -v google-chrome)" node test/ci.mjs

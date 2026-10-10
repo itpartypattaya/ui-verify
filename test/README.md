@@ -39,3 +39,9 @@ Notes:
 
 Adding a check or fixing a false positive: add the situation to
 `fixtures.html` (defect *and* control) and a case to `run.js`.
+
+In CI the same page runs headless: `test/ci.mjs` serves the repository root,
+opens `/test/` in Chrome through `playwright-core` (installed with `--no-save`,
+not a dependency of the skill) and fails the job unless every case passes.
+Locally: `npm install --no-save playwright-core` and
+`CHROME=<path to chrome> node test/ci.mjs`.
